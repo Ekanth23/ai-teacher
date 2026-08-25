@@ -1,6 +1,8 @@
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import pool from "../db.js";
 import { ApiError, ValidationError, normalizeIdentifier } from "./register.js";
+import { createAccessToken, generateRefreshToken, getRefreshTokenExpiryDate, getRefreshTokenExpiresDays, hashRefreshToken } from "./tokens.js";
 
 export class InvalidCredentialsError extends ApiError {
   constructor() {
@@ -67,12 +69,28 @@ export async function loginUser(input: unknown) {
   const updatedUser = updatedUserResult.rows[0] ?? user;
   const normalizedEmail = typeof updatedUser.email === "string" ? updatedUser.email.toLowerCase() : null;
 
+  const accessToken = createAccessToken(updatedUser.id);
+  const refreshToken = generateRefreshToken();
+  const refreshTokenHash = hashRefreshToken(refreshToken);
+  const familyId = crypto.randomUUID();
+  const expiresAt = getRefreshTokenExpiryDate();
+
+  await pool.query(
+    `INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [updatedUser.id, refreshTokenHash, familyId, expiresAt]
+  );
+
   return {
-    id: updatedUser.id,
-    full_name: updatedUser.full_name,
-    email: normalizedEmail,
-    phone: updatedUser.phone ?? null,
-    status: updatedUser.status,
-    created_at: updatedUser.created_at,
+    user: {
+      id: updatedUser.id,
+      full_name: updatedUser.full_name,
+      email: normalizedEmail,
+      phone: updatedUser.phone ?? null,
+      status: updatedUser.status,
+      created_at: updatedUser.created_at,
+    },
+    accessToken,
+    refreshToken,
   };
 }

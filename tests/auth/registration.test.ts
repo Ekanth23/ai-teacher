@@ -12,6 +12,16 @@ async function cleanupCreatedUsers() {
     return;
   }
 
+  await pool.query(
+    `UPDATE refresh_tokens
+     SET replaced_by_token_id = NULL
+     WHERE user_id = ANY($1::uuid[])`,
+    [createdUserIds]
+  );
+  await pool.query(
+    `DELETE FROM refresh_tokens WHERE user_id = ANY($1::uuid[])`,
+    [createdUserIds]
+  );
   await pool.query(`DELETE FROM users WHERE id = ANY($1::uuid[])`, [createdUserIds]);
   createdUserIds.length = 0;
 }

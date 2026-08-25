@@ -2,8 +2,19 @@ import express from "express";
 import cors from "cors";
 import { pathToFileURL } from "node:url";
 import pool from "./db.js";
-import { DuplicateUserError, ValidationError, registerUser } from "./auth/register.js";
 import { InvalidCredentialsError, loginUser } from "./auth/login.js";
+import { requireAuth, type AuthenticatedRequest } from "./auth/middleware.js";
+import { DuplicateUserError, ValidationError, registerUser } from "./auth/register.js";
+import {
+  createAccessToken,
+  findRefreshTokenByHash,
+  generateRefreshToken,
+  getRefreshTokenExpiryDate,
+  getRefreshTokenExpiresDays,
+  getUserById,
+  hashRefreshToken,
+  InvalidRefreshTokenError,
+} from "./auth/tokens.js";
 
 const PORT = 3000;
 
@@ -290,9 +301,9 @@ export function createApp() {
 
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const user = await loginUser(req.body);
+      const authResult = await loginUser(req.body);
 
-      return res.status(200).json({ user });
+      return res.status(200).json(authResult);
     } catch (error: unknown) {
       if (error instanceof ValidationError) {
         return res.status(400).json({
@@ -321,6 +332,165 @@ export function createApp() {
         },
       });
     }
+  });
+
+  app.post("/api/auth/refresh", async (req, res) => {
+    try {
+      const refreshToken = typeof req.body?.refreshToken === "string" ? req.body.refreshToken.trim() : "";
+
+      if (!refreshToken) {
+        return res.status(400).json({
+          error: {
+            code: "INVALID_REFRESH_TOKEN",
+            message: "Refresh token is required.",
+          },
+        });
+      }
+
+      const tokenHash = hashRefreshToken(refreshToken);
+      const tokenRecord = await findRefreshTokenByHash(tokenHash);
+
+      if (!tokenRecord) {
+        throw new InvalidRefreshTokenError();
+      }
+
+      if (tokenRecord.revoked_at) {
+        await pool.query(
+          `UPDATE refresh_tokens
+           SET revoked_at = NOW()
+           WHERE family_id = $1 AND revoked_at IS NULL`,
+          [tokenRecord.family_id]
+        );
+        throw new InvalidRefreshTokenError();
+      }
+
+      if (new Date(tokenRecord.expires_at) <= new Date()) {
+        throw new InvalidRefreshTokenError("Refresh token has expired.");
+      }
+
+      const user = await getUserById(tokenRecord.user_id);
+      if (!user || user.status !== "ACTIVE") {
+        throw new InvalidRefreshTokenError();
+      }
+
+      await pool.query(
+        `UPDATE refresh_tokens
+         SET revoked_at = NOW()
+         WHERE id = $1 AND revoked_at IS NULL`,
+        [tokenRecord.id]
+      );
+
+      const nextRefreshToken = generateRefreshToken();
+      const nextTokenHash = hashRefreshToken(nextRefreshToken);
+      const nextRefreshTokenExpiry = getRefreshTokenExpiryDate();
+      const replacementRecord = await pool.query(
+        `INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [user.id, nextTokenHash, tokenRecord.family_id, nextRefreshTokenExpiry]
+      );
+
+      await pool.query(
+        `UPDATE refresh_tokens
+         SET replaced_by_token_id = $1
+         WHERE id = $2`,
+        [replacementRecord.rows[0].id, tokenRecord.id]
+      );
+
+      const accessToken = createAccessToken(user.id);
+
+      return res.status(200).json({
+        accessToken,
+        refreshToken: nextRefreshToken,
+      });
+    } catch (error: unknown) {
+      if (error instanceof InvalidRefreshTokenError) {
+        return res.status(401).json({
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
+      }
+
+      if (error instanceof ValidationError) {
+        return res.status(400).json({
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
+      }
+
+      console.error("Refresh token error:", error);
+      return res.status(500).json({
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Failed to refresh authentication.",
+        },
+      });
+    }
+  });
+
+  app.post("/api/auth/logout", async (req, res) => {
+    try {
+      const refreshToken = typeof req.body?.refreshToken === "string" ? req.body.refreshToken.trim() : "";
+
+      if (!refreshToken) {
+        return res.status(400).json({
+          error: {
+            code: "INVALID_REFRESH_TOKEN",
+            message: "Refresh token is required.",
+          },
+        });
+      }
+
+      const tokenHash = hashRefreshToken(refreshToken);
+      await pool.query(
+        `UPDATE refresh_tokens
+         SET revoked_at = NOW()
+         WHERE token_hash = $1 AND revoked_at IS NULL`,
+        [tokenHash]
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Logged out successfully.",
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+      return res.status(500).json({
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Logout failed.",
+        },
+      });
+    }
+  });
+
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    const authRequest = req as AuthenticatedRequest;
+    const user = authRequest.user;
+
+    if (!user) {
+      return res.status(401).json({
+        error: {
+          code: "INVALID_TOKEN",
+          message: "Authentication required.",
+        },
+      });
+    }
+
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        full_name: user.full_name,
+        email: user.email,
+        phone: user.phone,
+        status: user.status,
+        created_at: user.created_at,
+      },
+    });
   });
 
   app.post("/api/auth/register", async (req, res) => {
