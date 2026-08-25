@@ -25,7 +25,7 @@ export class DuplicateUserError extends ApiError {
   }
 }
 
-function normalizeEmail(value: unknown): string | null {
+export function normalizeEmail(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
@@ -38,13 +38,34 @@ function normalizeEmail(value: unknown): string | null {
   return trimmed.toLowerCase();
 }
 
-function normalizePhone(value: unknown): string | null {
+export function normalizePhone(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
 
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+export function normalizeIdentifier(value: unknown): {
+  email: string | null;
+  phone: string | null;
+} {
+  if (typeof value !== "string") {
+    return { email: null, phone: null };
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { email: null, phone: null };
+  }
+
+  const normalizedEmail = normalizeEmail(trimmed);
+  if (normalizedEmail && EMAIL_REGEX.test(normalizedEmail)) {
+    return { email: normalizedEmail, phone: null };
+  }
+
+  return { email: null, phone: normalizePhone(trimmed) };
 }
 
 export async function registerUser(input: unknown) {
