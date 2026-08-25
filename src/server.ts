@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
-import pool from "./db";
+import pool from "./db.js";
+import { DuplicateUserError, ValidationError, registerUser } from "./auth/register.js";
 
 const app = express();
 
@@ -305,6 +306,43 @@ app.post("/api/ai/reply", async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to generate AI reply"
+    });
+  }
+});
+
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const user = await registerUser(req.body);
+
+    return res.status(201).json({ user });
+  } catch (error: unknown) {
+    if (error instanceof ValidationError) {
+      const validationError = error as ValidationError;
+      return res.status(400).json({
+        error: {
+          code: validationError.code,
+          message: validationError.message,
+        },
+      });
+    }
+
+    if (error instanceof DuplicateUserError) {
+      const duplicateError = error as DuplicateUserError;
+      return res.status(409).json({
+        error: {
+          code: duplicateError.code,
+          message: duplicateError.message,
+        },
+      });
+    }
+
+    console.error("Registration error:", error);
+
+    return res.status(500).json({
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to register user",
+      },
     });
   }
 });

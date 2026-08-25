@@ -1,0 +1,6 @@
+ALTER TABLE users
+  ALTER COLUMN email DROP NOT NULL;
+
+ALTER TABLE users
+  ADD CONSTRAINT users_identity_check
+  CHECK (email IS NOT NULL OR phone IS NOT NULL) NOT VALID;
