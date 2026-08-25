@@ -3,14 +3,22 @@ import cors from "cors";
 import { pathToFileURL } from "node:url";
 import pool from "./db.js";
 import { InvalidCredentialsError, loginUser } from "./auth/login.js";
-import { requireAuth, type AuthenticatedRequest } from "./auth/middleware.js";
+import { requireAuth, type AuthenticatedRequest as BasicAuthenticatedRequest } from "./auth/middleware.js";
 import { DuplicateUserError, ValidationError, registerUser } from "./auth/register.js";
+import {
+  AuthorizationError,
+  getUserOrganizations,
+  requireAnyRole,
+  requireOrganization,
+  requireRole,
+  resolveOrganizationContext,
+  type AuthenticatedRequest,
+} from "./auth/organization.js";
 import {
   createAccessToken,
   findRefreshTokenByHash,
   generateRefreshToken,
   getRefreshTokenExpiryDate,
-  getRefreshTokenExpiresDays,
   getUserById,
   hashRefreshToken,
   InvalidRefreshTokenError,
@@ -481,6 +489,8 @@ export function createApp() {
       });
     }
 
+    const organizations = await getUserOrganizations(user.id);
+
     return res.status(200).json({
       user: {
         id: user.id,
@@ -490,7 +500,300 @@ export function createApp() {
         status: user.status,
         created_at: user.created_at,
       },
+      organizations: organizations.map((organization) => ({
+        id: organization.id,
+        name: organization.name,
+        slug: organization.slug,
+        type: organization.type,
+        membership_status: organization.membership_status,
+        role_name: organization.role_name,
+      })),
     });
+  });
+
+  app.get("/api/organizations/context", requireAuth, requireOrganization, async (req, res) => {
+    const authRequest = req as AuthenticatedRequest;
+    const organizationContext = authRequest.organizationContext;
+
+    if (!organizationContext) {
+      return res.status(403).json({
+        error: {
+          code: "ORGANIZATION_REQUIRED",
+          message: "Organization context is required.",
+        },
+      });
+    }
+
+    return res.status(200).json({
+      user: {
+        id: organizationContext.user.id,
+        full_name: organizationContext.user.full_name,
+      },
+      organization: {
+        id: organizationContext.organization.id,
+        name: organizationContext.organization.name,
+        slug: organizationContext.organization.slug,
+        type: organizationContext.organization.type,
+      },
+      membership: {
+        id: organizationContext.membership.id,
+        status: organizationContext.membership.status,
+      },
+      role: {
+        id: organizationContext.role.id,
+        name: organizationContext.role.name,
+      },
+    });
+  });
+
+  app.get("/api/admin/school-check", requireAuth, requireOrganization, requireRole("SCHOOL_ADMIN"), (req, res) => {
+    const authRequest = req as AuthenticatedRequest;
+    return res.status(200).json({
+      ok: true,
+      organizationId: authRequest.organizationContext?.organization.id,
+      role: authRequest.organizationContext?.role.name,
+    });
+  });
+
+  app.get("/api/admin/coaching-check", requireAuth, requireOrganization, requireAnyRole(["COACHING_ADMIN"]), (req, res) => {
+    const authRequest = req as AuthenticatedRequest;
+    return res.status(200).json({
+      ok: true,
+      organizationId: authRequest.organizationContext?.organization.id,
+      role: authRequest.organizationContext?.role.name,
+    });
+  });
+
+  app.post("/api/organizations", requireAuth, async (req, res) => {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        return res.status(401).json({
+          error: {
+            code: "INVALID_TOKEN",
+            message: "Authentication required.",
+          },
+        });
+      }
+
+      const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      const rawSlug = typeof req.body?.slug === "string" ? req.body.slug.trim() : "";
+      const type = typeof req.body?.type === "string" ? req.body.type.trim().toUpperCase() : "";
+
+      if (!name) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Organization name is required.",
+          },
+        });
+      }
+
+      if (!rawSlug) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Organization slug is required.",
+          },
+        });
+      }
+
+      if (!["SCHOOL", "COACHING_CENTRE"].includes(type)) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Organization type must be SCHOOL or COACHING_CENTRE.",
+          },
+        });
+      }
+
+      const slug = rawSlug.toLowerCase().replace(/\s+/g, "-");
+      const adminRoleName = type === "SCHOOL" ? "SCHOOL_ADMIN" : "COACHING_ADMIN";
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const duplicateResult = await client.query(
+          `SELECT id FROM organizations WHERE slug = $1 LIMIT 1`,
+          [slug]
+        );
+
+        if (duplicateResult.rows.length > 0) {
+          throw new AuthorizationError("DUPLICATE_ORGANIZATION", "Organization slug is already in use.");
+        }
+
+        const roleResult = await client.query(
+          `SELECT id, name FROM roles WHERE name = $1 LIMIT 1`,
+          [adminRoleName]
+        );
+
+        if (roleResult.rows.length === 0) {
+          throw new Error("Missing admin role");
+        }
+
+        const orgResult = await client.query(
+          `INSERT INTO organizations (name, slug, type, status, created_by_user_id)
+           VALUES ($1, $2, $3, 'PENDING', $4)
+           RETURNING *`,
+          [name, slug, type, user.id]
+        );
+
+        const organization = orgResult.rows[0];
+
+        await client.query(
+          `INSERT INTO organization_members (user_id, organization_id, role_id, status)
+           VALUES ($1, $2, $3, 'ACTIVE')`,
+          [user.id, organization.id, roleResult.rows[0].id]
+        );
+
+        await client.query("COMMIT");
+
+        return res.status(201).json({
+          organization: {
+            id: organization.id,
+            name: organization.name,
+            slug: organization.slug,
+            type: organization.type,
+            status: organization.status,
+            created_by_user_id: organization.created_by_user_id,
+            created_at: organization.created_at,
+            updated_at: organization.updated_at,
+            role_name: roleResult.rows[0].name,
+            membership_status: "ACTIVE",
+          },
+        });
+      } catch (error) {
+        await client.query("ROLLBACK");
+
+        if (error instanceof AuthorizationError && error.code === "DUPLICATE_ORGANIZATION") {
+          return res.status(409).json({
+            error: {
+              code: error.code,
+              message: error.message,
+            },
+          });
+        }
+
+        if (error instanceof AuthorizationError) {
+          return res.status(403).json({
+            error: {
+              code: error.code,
+              message: error.message,
+            },
+          });
+        }
+
+        console.error("Organization creation error:", error);
+        return res.status(500).json({
+          error: {
+            code: "INTERNAL_ERROR",
+            message: "Failed to create organization.",
+          },
+        });
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error("Organization creation handler error:", error);
+      return res.status(500).json({
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Failed to create organization.",
+        },
+      });
+    }
+  });
+
+  app.get("/api/organizations", requireAuth, async (req, res) => {
+    const authRequest = req as AuthenticatedRequest;
+    const user = authRequest.user;
+
+    if (!user) {
+      return res.status(401).json({
+        error: {
+          code: "INVALID_TOKEN",
+          message: "Authentication required.",
+        },
+      });
+    }
+
+    const organizations = await getUserOrganizations(user.id);
+
+    return res.status(200).json({
+      organizations: organizations.map((organization) => ({
+        id: organization.id,
+        name: organization.name,
+        slug: organization.slug,
+        type: organization.type,
+        status: organization.status,
+        created_by_user_id: organization.created_by_user_id,
+        created_at: organization.created_at,
+        updated_at: organization.updated_at,
+        membership_status: organization.membership_status,
+        role_name: organization.role_name,
+      })),
+    });
+  });
+
+  app.get("/api/organizations/:id", requireAuth, async (req, res) => {
+    const authRequest = req as AuthenticatedRequest;
+    const user = authRequest.user;
+
+    if (!user) {
+      return res.status(401).json({
+        error: {
+          code: "INVALID_TOKEN",
+          message: "Authentication required.",
+        },
+      });
+    }
+
+    const organizationId = typeof req.params.id === "string" ? req.params.id.trim() : "";
+    if (!organizationId || !/^[0-9a-fA-F-]{36}$/.test(organizationId)) {
+      return res.status(403).json({
+        error: {
+          code: "ORGANIZATION_ACCESS_DENIED",
+          message: "You are not a member of this organization.",
+        },
+      });
+    }
+
+    try {
+      const organizationContext = await resolveOrganizationContext(req, user, organizationId);
+
+      return res.status(200).json({
+        organization: {
+          id: organizationContext.organization.id,
+          name: organizationContext.organization.name,
+          slug: organizationContext.organization.slug,
+          type: organizationContext.organization.type,
+          status: organizationContext.organization.status,
+          created_by_user_id: organizationContext.organization.created_by_user_id,
+          created_at: organizationContext.organization.created_at,
+          updated_at: organizationContext.organization.updated_at,
+          membership_status: organizationContext.membership.status,
+          role_name: organizationContext.role.name,
+        },
+      });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return res.status(403).json({
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
+      }
+
+      console.error("Organization detail error:", error);
+      return res.status(500).json({
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Failed to load organization.",
+        },
+      });
+    }
   });
 
   app.post("/api/auth/register", async (req, res) => {
