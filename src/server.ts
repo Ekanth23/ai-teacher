@@ -833,6 +833,315 @@ export function createApp() {
     }
   });
 
+  // Organization-scoped academic endpoints: teachers, students, classes, assignments, enrollments
+  // These use existing auth/organization utilities to enforce tenant isolation and roles.
+
+  app.post(
+    "/api/organizations/:id/teachers",
+    requireAuth,
+    requireOrganization,
+    requireAnyRole(["SCHOOL_ADMIN", "COACHING_ADMIN"]),
+    async (req, res) => {
+      try {
+        const authRequest = req as AuthenticatedRequest;
+        const organizationContext = authRequest.organizationContext;
+        const user = authRequest.user;
+
+        if (!organizationContext || !user) {
+          return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+        }
+
+        const orgId = organizationContext.organization.id;
+        const user_id = typeof req.body?.user_id === "string" ? req.body.user_id.trim() : "";
+        const designation = typeof req.body?.designation === "string" ? req.body.designation.trim() : null;
+        const qualification = typeof req.body?.qualification === "string" ? req.body.qualification.trim() : null;
+
+        if (!user_id) {
+          return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Teacher user_id is required." } });
+        }
+
+        const result = await pool.query(
+          `INSERT INTO teachers (organization_id, user_id, designation, qualification)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id, user_id, designation, qualification, created_at`,
+          [orgId, user_id, designation, qualification]
+        );
+
+        return res.status(201).json({ teacher: result.rows[0] });
+      } catch (error) {
+        console.error("Create teacher error:", error);
+        return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to create teacher." } });
+      }
+    }
+  );
+
+  app.get("/api/organizations/:id/teachers", requireAuth, requireOrganization, async (req, res) => {
+    try {
+      const authRequest = req as AuthenticatedRequest;
+      const organizationContext = authRequest.organizationContext;
+
+      if (!organizationContext) {
+        return res.status(403).json({ error: { code: "ORGANIZATION_REQUIRED", message: "Organization context is required." } });
+      }
+
+      const orgId = organizationContext.organization.id;
+      const result = await pool.query(
+        `SELECT t.id,
+                u.full_name,
+                u.email,
+                u.phone,
+                t.designation,
+                t.qualification,
+                t.created_at
+         FROM teachers t
+         JOIN users u ON u.id = t.user_id
+         WHERE t.organization_id = $1
+         ORDER BY t.created_at ASC`,
+        [orgId]
+      );
+
+      return res.status(200).json({ teachers: result.rows });
+    } catch (error) {
+      console.error("List teachers error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to list teachers." } });
+    }
+  });
+
+  app.post(
+    "/api/organizations/:id/students",
+    requireAuth,
+    requireOrganization,
+    requireAnyRole(["SCHOOL_ADMIN", "COACHING_ADMIN"]),
+    async (req, res) => {
+      try {
+        const authRequest = req as AuthenticatedRequest;
+        const organizationContext = authRequest.organizationContext;
+        const user = authRequest.user;
+
+        if (!organizationContext || !user) {
+          return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+        }
+
+        const orgId = organizationContext.organization.id;
+        const user_id = typeof req.body?.user_id === "string" ? req.body.user_id.trim() : "";
+        const full_name = typeof req.body?.full_name === "string" ? req.body.full_name.trim() : "";
+        const grade_level = typeof req.body?.grade_level === "string" ? req.body.grade_level.trim() : null;
+
+        if (!user_id || !full_name) {
+          return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Student user_id and full_name are required." } });
+        }
+
+        const result = await pool.query(
+          `INSERT INTO students_v2 (organization_id, user_id, full_name, grade_level)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id, user_id, full_name, grade_level, created_at`,
+          [orgId, user_id, full_name, grade_level]
+        );
+
+        return res.status(201).json({ student: result.rows[0] });
+      } catch (error) {
+        console.error("Create student error:", error);
+        return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to create student." } });
+      }
+    }
+  );
+
+  app.get("/api/organizations/:id/students", requireAuth, requireOrganization, async (req, res) => {
+    try {
+      const authRequest = req as AuthenticatedRequest;
+      const organizationContext = authRequest.organizationContext;
+
+      if (!organizationContext) {
+        return res.status(403).json({ error: { code: "ORGANIZATION_REQUIRED", message: "Organization context is required." } });
+      }
+
+      const orgId = organizationContext.organization.id;
+      const result = await pool.query(
+        `SELECT s.id,
+                s.full_name,
+                s.grade_level,
+                u.email,
+                u.phone,
+                s.created_at
+         FROM students_v2 s
+         JOIN users u ON u.id = s.user_id
+         WHERE s.organization_id = $1
+         ORDER BY s.created_at ASC`,
+        [orgId]
+      );
+
+      return res.status(200).json({ students: result.rows });
+    } catch (error) {
+      console.error("List students error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to list students." } });
+    }
+  });
+
+  app.post("/api/organizations/:id/classes", requireAuth, requireOrganization, requireAnyRole(["SCHOOL_ADMIN", "COACHING_ADMIN"]), async (req, res) => {
+    try {
+      const authRequest = req as AuthenticatedRequest;
+      const organizationContext = authRequest.organizationContext;
+      const user = authRequest.user;
+
+      if (!organizationContext || !user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const orgId = organizationContext.organization.id;
+      const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      const section = typeof req.body?.section === "string" ? req.body.section.trim() : null;
+
+      if (!name) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Class name is required." } });
+      }
+
+      const result = await pool.query(
+        `INSERT INTO classes (organization_id, name, section, created_by_user_id)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, name, section, created_at`,
+        [orgId, name, section, user.id]
+      );
+
+      return res.status(201).json({ class: result.rows[0] });
+    } catch (error) {
+      console.error("Create class error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to create class." } });
+    }
+  });
+
+  app.get("/api/organizations/:id/classes", requireAuth, requireOrganization, async (req, res) => {
+    try {
+      const authRequest = req as AuthenticatedRequest;
+      const organizationContext = authRequest.organizationContext;
+
+      if (!organizationContext) {
+        return res.status(403).json({ error: { code: "ORGANIZATION_REQUIRED", message: "Organization context is required." } });
+      }
+
+      const orgId = organizationContext.organization.id;
+      const result = await pool.query(`SELECT id, name, section, created_at FROM classes WHERE organization_id = $1 ORDER BY created_at ASC`, [orgId]);
+
+      return res.status(200).json({ classes: result.rows });
+    } catch (error) {
+      console.error("List classes error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to list classes." } });
+    }
+  });
+
+  app.post("/api/classes/:id/teachers", requireAuth, async (req, res) => {
+    try {
+      const authRequest = req as AuthenticatedRequest;
+      const user = authRequest.user;
+
+      if (!user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const classId = typeof req.params?.id === "string" ? req.params.id.trim() : "";
+      const teacherId = typeof req.body?.teacher_id === "string" ? req.body.teacher_id.trim() : "";
+
+      if (!classId || !teacherId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "class id and teacher_id are required." } });
+      }
+
+      // Ensure class and teacher belong to same organization
+      const classRes = await pool.query(`SELECT organization_id FROM classes WHERE id = $1 LIMIT 1`, [classId]);
+      const teacherRes = await pool.query(`SELECT organization_id FROM teachers WHERE id = $1 LIMIT 1`, [teacherId]);
+
+      if (classRes.rows.length === 0 || teacherRes.rows.length === 0) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Class or teacher not found." } });
+      }
+
+      if (classRes.rows[0].organization_id !== teacherRes.rows[0].organization_id) {
+        return res.status(403).json({ error: { code: "ORGANIZATION_MISMATCH", message: "Class and teacher must belong to the same organization." } });
+      }
+
+      // Ensure the requesting user is a member of the class' organization
+      try {
+        await resolveOrganizationContext(req, user, classRes.rows[0].organization_id);
+      } catch (err) {
+        return res.status(403).json({ error: { code: "ORGANIZATION_REQUIRED", message: "You must be a member of this organization to assign teachers." } });
+      }
+
+      await pool.query(
+        `INSERT INTO class_teacher_assignments (organization_id, class_id, teacher_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT DO NOTHING`,
+        [classRes.rows[0].organization_id, classId, teacherId]
+      );
+
+      return res.status(201).json({ success: true });
+    } catch (error) {
+      console.error("Assign teacher to class error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to assign teacher to class." } });
+    }
+  });
+
+  app.post("/api/classes/:id/students", requireAuth, async (req, res) => {
+    try {
+      const authRequest = req as AuthenticatedRequest;
+      const user = authRequest.user;
+
+      if (!user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const classId = typeof req.params?.id === "string" ? req.params.id.trim() : "";
+      const studentId = typeof req.body?.student_id === "string" ? req.body.student_id.trim() : "";
+
+      if (!classId || !studentId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "class id and student_id are required." } });
+      }
+
+      // Ensure class and student belong to same organization
+      const classRes = await pool.query(`SELECT organization_id FROM classes WHERE id = $1 LIMIT 1`, [classId]);
+      const studentRes = await pool.query(`SELECT organization_id FROM students_v2 WHERE id = $1 LIMIT 1`, [studentId]);
+
+      if (classRes.rows.length === 0 || studentRes.rows.length === 0) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Class or student not found." } });
+      }
+
+      if (classRes.rows[0].organization_id !== studentRes.rows[0].organization_id) {
+        return res.status(403).json({ error: { code: "ORGANIZATION_MISMATCH", message: "Class and student must belong to the same organization." } });
+      }
+
+      await pool.query(
+        `INSERT INTO student_enrollments (organization_id, student_id, class_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT DO NOTHING`,
+        [classRes.rows[0].organization_id, studentId, classId]
+      );
+
+      return res.status(201).json({ success: true });
+    } catch (error) {
+      console.error("Enroll student error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to enroll student." } });
+    }
+  });
+
+  app.get("/api/classes/:id/students", requireAuth, async (req, res) => {
+    try {
+      const classId = typeof req.params?.id === "string" ? req.params.id.trim() : "";
+      if (!classId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "class id is required." } });
+      }
+
+      const rosterRes = await pool.query(
+        `SELECT s.id, s.full_name, se.enrolled_on
+         FROM student_enrollments se
+         JOIN students_v2 s ON s.id = se.student_id
+         WHERE se.class_id = $1 AND se.status = 'ACTIVE'
+         ORDER BY se.enrolled_on ASC`,
+        [classId]
+      );
+
+      return res.status(200).json({ students: rosterRes.rows });
+    } catch (error) {
+      console.error("Get class roster error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to load class roster." } });
+    }
+  });
+
   return app;
 }
 
