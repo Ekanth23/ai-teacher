@@ -825,9 +825,236 @@ export function createApp() {
 
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const user = await registerUser(req.body);
+      const invitationToken = typeof req.body?.invitation_token === "string" ? req.body.invitation_token.trim() : "";
+      let invitationContext: null | {
+        id: string;
+        organization_id: string;
+        class_id: string;
+        status: string;
+        expires_at: string | null;
+        max_uses: number | null;
+        use_count: number;
+        academic_year: string | null;
+        organization_status: string;
+      } = null;
 
-      return res.status(201).json({ user });
+      if (invitationToken) {
+        const invitationResult = await pool.query(
+          `SELECT ci.id,
+                  ci.organization_id,
+                  ci.class_id,
+                  ci.status,
+                  ci.expires_at,
+                  ci.max_uses,
+                  ci.use_count,
+                  c.academic_year,
+                  o.status AS organization_status
+           FROM class_invitations ci
+           JOIN classes c ON c.id = ci.class_id
+           JOIN organizations o ON o.id = ci.organization_id
+           WHERE ci.token_hash = $1
+           LIMIT 1`,
+          [hashInvitationToken(invitationToken)]
+        );
+
+        if (invitationResult.rows.length === 0) {
+          return res.status(404).json({
+            error: {
+              code: "INVITATION_NOT_FOUND",
+              message: "Invitation not found.",
+            },
+          });
+        }
+
+        invitationContext = invitationResult.rows[0];
+        const invitation = invitationContext;
+        if (!invitation) {
+          return res.status(404).json({
+            error: {
+              code: "INVITATION_NOT_FOUND",
+              message: "Invitation not found.",
+            },
+          });
+        }
+
+        if (invitation.organization_status !== "ACTIVE") {
+          return res.status(410).json({
+            error: {
+              code: "INVITATION_INVALID",
+              message: "Invitation is not valid for an active organization.",
+            },
+          });
+        }
+
+        if (invitation.status !== "ACTIVE") {
+          return res.status(410).json({
+            error: {
+              code: "INVITATION_INVALID",
+              message: "Invitation is no longer active.",
+            },
+          });
+        }
+
+        if (invitation.expires_at && new Date(invitation.expires_at) <= new Date()) {
+          return res.status(410).json({
+            error: {
+              code: "INVITATION_EXPIRED",
+              message: "Invitation has expired.",
+            },
+          });
+        }
+
+        if (invitation.max_uses !== null && invitation.use_count >= invitation.max_uses) {
+          return res.status(410).json({
+            error: {
+              code: "INVITATION_LIMIT_REACHED",
+              message: "Invitation usage limit has been reached.",
+            },
+          });
+        }
+      }
+
+      const client = invitationContext ? await pool.connect() : null;
+
+      try {
+        if (invitationContext) {
+          await client!.query("BEGIN");
+        }
+
+        const user = invitationContext ? await registerUser(req.body, client!) : await registerUser(req.body);
+
+        if (invitationContext) {
+          const studentRoleResult = await client!.query(`SELECT id FROM roles WHERE name = 'STUDENT' LIMIT 1`);
+          const studentRoleId = studentRoleResult.rows[0]?.id;
+          if (!studentRoleId) {
+           throw new Error("STUDENT role is not configured.");
+          }
+
+          const existingMembership = await client!.query(
+           `SELECT role_id, status
+             FROM organization_members
+             WHERE user_id = $1 AND organization_id = $2
+             LIMIT 1`,
+           [user.id, invitationContext.organization_id]
+          );
+
+          if (existingMembership.rows.length > 0 && existingMembership.rows[0].role_id !== studentRoleId) {
+           await client!.query("ROLLBACK");
+           return res.status(403).json({
+             error: {
+               code: "ROLE_REQUIRED",
+               message: "This account is already associated with a different role in this organization.",
+             },
+           });
+          }
+
+          const membershipResult = await client!.query(
+           `INSERT INTO organization_members (user_id, organization_id, role_id, status)
+             VALUES ($1, $2, $3, 'ACTIVE')
+             ON CONFLICT (user_id, organization_id)
+             DO UPDATE SET role_id = EXCLUDED.role_id, status = 'ACTIVE', updated_at = NOW()
+             RETURNING id, user_id, organization_id, role_id, status`,
+           [user.id, invitationContext.organization_id, studentRoleId]
+          );
+
+          const existingStudent = await client!.query(
+           `SELECT id, user_id, organization_id, full_name, grade_level FROM students_v2
+             WHERE user_id = $1 AND organization_id = $2
+             LIMIT 1`,
+           [user.id, invitationContext.organization_id]
+          );
+
+          const fullName = typeof req.body?.full_name === "string" ? req.body.full_name.trim() : user.full_name;
+          const gradeLevel = typeof req.body?.grade_level === "string" ? req.body.grade_level.trim() : null;
+          let studentRecord;
+
+          if (existingStudent.rows.length > 0) {
+           studentRecord = await client!.query(
+             `UPDATE students_v2
+               SET full_name = $3,
+                   grade_level = COALESCE($4, grade_level),
+                   updated_at = NOW()
+               WHERE id = $1
+               RETURNING id, user_id, organization_id, full_name, grade_level, status`,
+             [existingStudent.rows[0].id, invitationContext.organization_id, fullName, gradeLevel]
+           );
+          } else {
+           studentRecord = await client!.query(
+             `INSERT INTO students_v2 (organization_id, user_id, full_name, grade_level, status)
+               VALUES ($1, $2, $3, $4, 'ACTIVE')
+               RETURNING id, user_id, organization_id, full_name, grade_level, status`,
+             [invitationContext.organization_id, user.id, fullName, gradeLevel]
+           );
+          }
+
+          const existingEnrollment = await client!.query(
+           `SELECT id, organization_id, student_id, class_id, academic_year, status
+             FROM student_enrollments
+             WHERE student_id = $1 AND class_id = $2 AND status = 'ACTIVE'
+             LIMIT 1`,
+           [studentRecord.rows[0].id, invitationContext.class_id]
+          );
+
+          let enrollmentResponse = existingEnrollment.rows[0] ?? null;
+          if (!enrollmentResponse) {
+           const enrollmentResult = await client!.query(
+             `INSERT INTO student_enrollments (organization_id, student_id, class_id, academic_year, status)
+               VALUES ($1, $2, $3, $4, 'ACTIVE')
+               RETURNING id, organization_id, student_id, class_id, academic_year, status, enrolled_on`,
+             [invitationContext.organization_id, studentRecord.rows[0].id, invitationContext.class_id, invitationContext.academic_year]
+           );
+           enrollmentResponse = enrollmentResult.rows[0];
+          }
+
+          await client!.query(
+           `UPDATE class_invitations
+             SET use_count = use_count + 1,
+                 updated_at = NOW()
+             WHERE id = $1`,
+           [invitationContext.id]
+          );
+
+          const updatedUserResult = await client!.query(
+           `UPDATE users
+             SET status = 'ACTIVE',
+                 email_verified_at = CASE WHEN email IS NOT NULL AND email_verified_at IS NULL THEN NOW() ELSE email_verified_at END,
+                 phone_verified_at = CASE WHEN phone IS NOT NULL AND phone_verified_at IS NULL THEN NOW() ELSE phone_verified_at END,
+                 updated_at = NOW()
+             WHERE id = $1
+             RETURNING id, full_name, email, phone, status, created_at`,
+           [user.id]
+          );
+
+          await client!.query("COMMIT");
+
+          return res.status(201).json({
+           user: updatedUserResult.rows[0],
+           membership: membershipResult.rows[0],
+           student: studentRecord.rows[0],
+           enrollment: enrollmentResponse,
+           invitation: {
+             id: invitationContext.id,
+             organization_id: invitationContext.organization_id,
+             class_id: invitationContext.class_id,
+           },
+          });
+        }
+
+        return res.status(201).json({ user });
+      } catch (error: unknown) {
+        if (client) {
+          try {
+           await client.query("ROLLBACK");
+          } catch {
+           // Ignore rollback errors after a failed transaction.
+          }
+        }
+        throw error;
+      } finally {
+        if (client) {
+          client.release();
+        }
+      }
     } catch (error: unknown) {
       if (error instanceof ValidationError) {
         const validationError = error as ValidationError;
@@ -1409,61 +1636,91 @@ export function createApp() {
         return res.status(410).json({ error: { code: "INVITATION_LIMIT_REACHED", message: "Invitation usage limit has been reached." } });
       }
 
-      const membershipResult = await pool.query(
-        `SELECT om.organization_id, r.name AS role_name
-         FROM organization_members om
-         JOIN roles r ON r.id = om.role_id
-         WHERE om.user_id = $1
-           AND om.status = 'ACTIVE'
-           AND om.organization_id = $2
-         LIMIT 1`,
-        [user.id, invitation.organization_id]
-      );
+      const client = await pool.connect();
 
-      if (membershipResult.rows.length === 0 || membershipResult.rows[0].role_name !== "STUDENT") {
-        return res.status(403).json({ error: { code: "STUDENT_REQUIRED", message: "Only a student account can join with an invitation." } });
+      try {
+        await client.query("BEGIN");
+
+        const membershipResult = await client.query(
+         `SELECT om.organization_id, r.name AS role_name
+           FROM organization_members om
+           JOIN roles r ON r.id = om.role_id
+           WHERE om.user_id = $1
+             AND om.status = 'ACTIVE'
+             AND om.organization_id = $2
+           LIMIT 1`,
+         [user.id, invitation.organization_id]
+        );
+
+        if (membershipResult.rows.length === 0 || membershipResult.rows[0].role_name !== "STUDENT") {
+         await client.query("ROLLBACK");
+         return res.status(403).json({ error: { code: "STUDENT_REQUIRED", message: "Only a student account can join with an invitation." } });
+        }
+
+        const studentResult = await client.query(
+         `SELECT id, organization_id, user_id
+           FROM students_v2
+           WHERE user_id = $1 AND organization_id = $2
+           LIMIT 1`,
+         [user.id, invitation.organization_id]
+        );
+
+        let studentRecord = studentResult.rows[0] ?? null;
+        if (!studentRecord) {
+         const userResult = await client.query(
+           `SELECT full_name FROM users WHERE id = $1 LIMIT 1`,
+           [user.id]
+         );
+         const fallbackName = typeof userResult.rows[0]?.full_name === "string" ? userResult.rows[0].full_name.trim() : "Student";
+         const createdStudentResult = await client.query(
+           `INSERT INTO students_v2 (organization_id, user_id, full_name, grade_level, status)
+             VALUES ($1, $2, $3, $4, 'ACTIVE')
+             RETURNING id, organization_id, user_id, full_name, grade_level`,
+           [invitation.organization_id, user.id, fallbackName || "Student", null]
+         );
+         studentRecord = createdStudentResult.rows[0];
+        }
+
+        const existingEnrollment = await client.query(
+         `SELECT id FROM student_enrollments
+           WHERE student_id = $1 AND class_id = $2 AND status = 'ACTIVE'
+           LIMIT 1`,
+         [studentRecord.id, invitation.class_id]
+        );
+
+        if (existingEnrollment.rows.length > 0) {
+         await client.query("ROLLBACK");
+         return res.status(409).json({ error: { code: "ALREADY_ENROLLED", message: "Student is already enrolled in this class." } });
+        }
+
+        const enrollmentResult = await client.query(
+         `INSERT INTO student_enrollments (organization_id, student_id, class_id, academic_year, status)
+           VALUES ($1, $2, $3, $4, 'ACTIVE')
+           RETURNING id, organization_id, student_id, class_id, academic_year, status, enrolled_on, created_at, updated_at`,
+         [invitation.organization_id, studentRecord.id, invitation.class_id, invitation.academic_year]
+        );
+
+        await client.query(
+         `UPDATE class_invitations
+           SET use_count = use_count + 1,
+               updated_at = NOW()
+           WHERE id = $1`,
+         [invitation.id]
+        );
+
+        await client.query("COMMIT");
+
+        return res.status(201).json({ enrollment: enrollmentResult.rows[0] });
+      } catch (error) {
+        try {
+         await client.query("ROLLBACK");
+        } catch {
+         // Ignore rollback errors after transaction failure.
+        }
+        throw error;
+      } finally {
+        client.release();
       }
-
-      const studentResult = await pool.query(
-        `SELECT id, organization_id, user_id
-         FROM students_v2
-         WHERE user_id = $1 AND organization_id = $2
-         LIMIT 1`,
-        [user.id, invitation.organization_id]
-      );
-
-      if (studentResult.rows.length === 0) {
-        return res.status(403).json({ error: { code: "STUDENT_REQUIRED", message: "Student profile is required for this organization." } });
-      }
-
-      const studentRecord = studentResult.rows[0];
-      const existingEnrollment = await pool.query(
-        `SELECT id FROM student_enrollments
-         WHERE student_id = $1 AND class_id = $2 AND status = 'ACTIVE'
-         LIMIT 1`,
-        [studentRecord.id, invitation.class_id]
-      );
-
-      if (existingEnrollment.rows.length > 0) {
-        return res.status(409).json({ error: { code: "ALREADY_ENROLLED", message: "Student is already enrolled in this class." } });
-      }
-
-      const enrollmentResult = await pool.query(
-        `INSERT INTO student_enrollments (organization_id, student_id, class_id, academic_year, status)
-         VALUES ($1, $2, $3, $4, 'ACTIVE')
-         RETURNING id, organization_id, student_id, class_id, academic_year, status, enrolled_on, created_at, updated_at`,
-        [invitation.organization_id, studentRecord.id, invitation.class_id, invitation.academic_year]
-      );
-
-      await pool.query(
-        `UPDATE class_invitations
-         SET use_count = use_count + 1,
-             updated_at = NOW()
-         WHERE id = $1`,
-        [invitation.id]
-      );
-
-      return res.status(201).json({ enrollment: enrollmentResult.rows[0] });
     } catch (error) {
       if (error instanceof AuthorizationError) {
         return res.status(403).json({ error: { code: error.code, message: error.message } });

@@ -68,7 +68,7 @@ export function normalizeIdentifier(value: unknown): {
   return { email: null, phone: normalizePhone(trimmed) };
 }
 
-export async function registerUser(input: unknown) {
+export async function registerUser(input: unknown, client?: { query: (...args: any[]) => Promise<any> }) {
   if (!input || typeof input !== "object") {
     throw new ValidationError("Request body must be a JSON object.");
   }
@@ -102,12 +102,19 @@ export async function registerUser(input: unknown) {
   const passwordHash = await bcrypt.hash(password, 10);
 
   try {
-    const result = await pool.query(
-      `INSERT INTO users (email, phone, password_hash, full_name, status)
-       VALUES ($1, $2, $3, $4, 'PENDING_VERIFICATION')
-       RETURNING id, full_name, email, phone, status, created_at`,
-      [email, phone, passwordHash, fullName]
-    );
+    const result = client
+      ? await client.query(
+         `INSERT INTO users (email, phone, password_hash, full_name, status)
+           VALUES ($1, $2, $3, $4, 'PENDING_VERIFICATION')
+           RETURNING id, full_name, email, phone, status, created_at`,
+         [email, phone, passwordHash, fullName]
+       )
+      : await pool.query(
+         `INSERT INTO users (email, phone, password_hash, full_name, status)
+           VALUES ($1, $2, $3, $4, 'PENDING_VERIFICATION')
+           RETURNING id, full_name, email, phone, status, created_at`,
+         [email, phone, passwordHash, fullName]
+       );
 
     const user = result.rows[0];
 

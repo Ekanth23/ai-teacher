@@ -42,6 +42,8 @@ async function cleanup() {
   }
 
   if (createdOrganizationIds.length > 0) {
+    await pool.query(`DELETE FROM student_enrollments WHERE organization_id = ANY($1::uuid[])`, [createdOrganizationIds]);
+    await pool.query(`DELETE FROM students_v2 WHERE organization_id = ANY($1::uuid[])`, [createdOrganizationIds]);
     await pool.query(`DELETE FROM organization_members WHERE organization_id = ANY($1::uuid[])`, [createdOrganizationIds]);
     await pool.query(`DELETE FROM organizations WHERE id = ANY($1::uuid[])`, [createdOrganizationIds]);
     createdOrganizationIds.length = 0;
@@ -381,5 +383,141 @@ describe("Phase 2 class invitation and join flow", () => {
       .delete(`/api/classes/${classResponse.body.class.id}/invitations/${firstInvitation.body.invitation.id}`)
       .set("Authorization", `Bearer ${unauthorizedLogin.body.accessToken}`);
     expect(unauthorizedRevoke.status).toBe(403);
+  });
+
+  it("registers a new student through a valid invitation and auto-enrolls them in the class", async () => {
+    const { user: adminUser, accessToken } = await createAuthenticatedUser({
+      email: `${uniqueValue("reg-invite-admin")}@example.com`,
+      password: "StrongPassword123!",
+      fullName: "Invite Register Admin",
+    });
+    const org = await createOrganizationForUser({ userId: adminUser.id, type: "SCHOOL", name: "Register Invite School", slug: `reg-invite-school-${uniqueValue("slug")}` });
+
+    const classResponse = await request(app)
+      .post(`/api/organizations/${org.id}/classes`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ name: "Class 6-B", section: "B" });
+    createdClassIds.push(classResponse.body.class.id);
+
+    const invitationResponse = await request(app)
+      .post(`/api/classes/${classResponse.body.class.id}/invitations`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ max_uses: 2 });
+    expect(invitationResponse.status).toBe(201);
+    createdInvitationIds.push(invitationResponse.body.invitation.id);
+
+    const registerResponse = await request(app)
+      .post("/api/auth/register")
+      .send({
+        full_name: "Invited Student",
+        email: `${uniqueValue("invite-student")}@example.com`,
+        password: "StrongPassword123!",
+        invitation_token: invitationResponse.body.invitation.token,
+        organization_id: "00000000-0000-0000-0000-000000000001",
+        class_id: "00000000-0000-0000-0000-000000000002",
+      });
+
+    createdUserIds.push(registerResponse.body.user.id);
+    createdStudentIds.push(registerResponse.body.student.id);
+
+    expect(registerResponse.status).toBe(201);
+    expect(registerResponse.body.user.status).toBe("ACTIVE");
+    expect(registerResponse.body.invitation.class_id).toBe(classResponse.body.class.id);
+    expect(registerResponse.body.invitation.organization_id).toBe(org.id);
+    expect(registerResponse.body.student.organization_id).toBe(org.id);
+    expect(registerResponse.body.enrollment.class_id).toBe(classResponse.body.class.id);
+
+    const orgMembership = await pool.query(
+      `SELECT role_id FROM organization_members WHERE user_id = $1 AND organization_id = $2 LIMIT 1`,
+      [registerResponse.body.user.id, org.id]
+    );
+    expect(orgMembership.rows[0]).toBeDefined();
+
+    const roleNameResult = await pool.query(
+      `SELECT r.name FROM roles r JOIN organization_members om ON om.role_id = r.id WHERE om.user_id = $1 AND om.organization_id = $2 LIMIT 1`,
+      [registerResponse.body.user.id, org.id]
+    );
+    expect(roleNameResult.rows[0].name).toBe("STUDENT");
+
+    const enrollmentCheck = await pool.query(
+      `SELECT id FROM student_enrollments WHERE student_id = $1 AND class_id = $2 AND status = 'ACTIVE' LIMIT 1`,
+      [registerResponse.body.student.id, classResponse.body.class.id]
+    );
+    expect(enrollmentCheck.rows[0]).toBeDefined();
+
+    createdUserIds.push(registerResponse.body.user.id);
+  });
+
+  it("rejects invalid, expired, and revoked registration invitations and ignores forged org or class ids", async () => {
+    const { user: adminUser, accessToken } = await createAuthenticatedUser({
+      email: `${uniqueValue("reg-bad-invite-admin")}@example.com`,
+      password: "StrongPassword123!",
+      fullName: "Bad Invite Admin",
+    });
+    const org = await createOrganizationForUser({ userId: adminUser.id, type: "COACHING_CENTRE", name: "Bad Invite Org", slug: `bad-invite-org-${uniqueValue("slug")}` });
+
+    const classResponse = await request(app)
+      .post(`/api/organizations/${org.id}/classes`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ name: "Class 9-A", section: "A" });
+    createdClassIds.push(classResponse.body.class.id);
+
+    const validInvitation = await request(app)
+      .post(`/api/classes/${classResponse.body.class.id}/invitations`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ max_uses: 1 });
+    expect(validInvitation.status).toBe(201);
+    createdInvitationIds.push(validInvitation.body.invitation.id);
+
+    const invalidResponse = await request(app)
+      .post("/api/auth/register")
+      .send({
+        full_name: "Invalid Invite User",
+        email: `${uniqueValue("invalid-invite")}@example.com`,
+        password: "StrongPassword123!",
+        invitation_token: "not-a-real-token",
+      });
+    expect(invalidResponse.status).toBe(404);
+
+    await pool.query(`UPDATE class_invitations SET status = 'REVOKED', updated_at = NOW() WHERE id = $1`, [validInvitation.body.invitation.id]);
+    const revokedResponse = await request(app)
+      .post("/api/auth/register")
+      .send({
+        full_name: "Revoked Invite User",
+        email: `${uniqueValue("revoked-invite")}@example.com`,
+        password: "StrongPassword123!",
+        invitation_token: validInvitation.body.invitation.token,
+      });
+    expect(revokedResponse.status).toBe(410);
+
+    const secondInvitation = await request(app)
+      .post(`/api/classes/${classResponse.body.class.id}/invitations`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ max_uses: 1 });
+    expect(secondInvitation.status).toBe(201);
+    createdInvitationIds.push(secondInvitation.body.invitation.id);
+    await pool.query(`UPDATE class_invitations SET expires_at = NOW() - INTERVAL '1 minute', updated_at = NOW() WHERE id = $1`, [secondInvitation.body.invitation.id]);
+
+    const expiredResponse = await request(app)
+      .post("/api/auth/register")
+      .send({
+        full_name: "Expired Invite User",
+        email: `${uniqueValue("expired-invite")}@example.com`,
+        password: "StrongPassword123!",
+        invitation_token: secondInvitation.body.invitation.token,
+      });
+    expect(expiredResponse.status).toBe(410);
+
+    const forgedRegistration = await request(app)
+      .post("/api/auth/register")
+      .send({
+        full_name: "Forged Org User",
+        email: `${uniqueValue("forged-invite")}@example.com`,
+        password: "StrongPassword123!",
+        invitation_token: validInvitation.body.invitation.token,
+        organization_id: "00000000-0000-0000-0000-000000000001",
+        class_id: "00000000-0000-0000-0000-000000000002",
+      });
+    expect(forgedRegistration.status).toBe(410);
   });
 });
