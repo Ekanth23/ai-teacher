@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import { pathToFileURL } from "node:url";
@@ -25,6 +26,32 @@ import {
 } from "./auth/tokens.js";
 
 const PORT = 3000;
+
+function generateInvitationToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function hashInvitationToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function parseInvitationMaxUses(value: unknown) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseInvitationExpiresAt(value: unknown) {
+  if (value === undefined || value === null || value === "") {
+    return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  }
+
+  const parsed = new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : parsed;
+}
 
 export function createApp() {
   const app = express();
@@ -1025,6 +1052,425 @@ export function createApp() {
     } catch (error) {
       console.error("List classes error:", error);
       return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to list classes." } });
+    }
+  });
+
+  app.post("/api/classes/:classId/invitations", requireAuth, async (req, res) => {
+    try {
+      const authRequest = req as AuthenticatedRequest;
+      const user = authRequest.user;
+      if (!user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const classId = typeof req.params?.classId === "string" ? req.params.classId.trim() : "";
+      if (!classId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Class id is required." } });
+      }
+
+      const classResult = await pool.query(
+        `SELECT c.id, c.organization_id, c.name, c.section, c.academic_year,
+                o.status AS organization_status, o.name AS organization_name, o.type AS organization_type
+         FROM classes c
+         JOIN organizations o ON o.id = c.organization_id
+         WHERE c.id = $1
+         LIMIT 1`,
+        [classId]
+      );
+
+      if (classResult.rows.length === 0) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Class not found." } });
+      }
+
+      const classRecord = classResult.rows[0];
+      if (classRecord.organization_status !== "ACTIVE") {
+        return res.status(403).json({ error: { code: "ORGANIZATION_INACTIVE", message: "Organization is not active." } });
+      }
+
+      const organizationContext = await resolveOrganizationContext(req, user, classRecord.organization_id);
+      const isAdmin = ["SCHOOL_ADMIN", "COACHING_ADMIN"].includes(organizationContext.role.name);
+      const teacherResult = await pool.query(
+        `SELECT t.id
+         FROM teachers t
+         JOIN class_teacher_assignments cta ON cta.teacher_id = t.id
+         WHERE t.user_id = $1
+           AND t.organization_id = $2
+           AND cta.class_id = $3
+         LIMIT 1`,
+        [user.id, classRecord.organization_id, classId]
+      );
+
+      if (!isAdmin && teacherResult.rows.length === 0) {
+        return res.status(403).json({ error: { code: "FORBIDDEN", message: "You are not authorized to create invitations for this class." } });
+      }
+
+      const rawToken = generateInvitationToken();
+      const expiresAt = parseInvitationExpiresAt(req.body?.expires_at);
+      const maxUses = parseInvitationMaxUses(req.body?.max_uses);
+
+      const invitationResult = await pool.query(
+        `INSERT INTO class_invitations (
+            organization_id,
+            class_id,
+            created_by_user_id,
+            token_hash,
+            expires_at,
+            max_uses,
+            status
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE')
+          RETURNING id, organization_id, class_id, created_by_user_id, expires_at, max_uses, use_count, status, created_at, updated_at`,
+        [classRecord.organization_id, classId, user.id, hashInvitationToken(rawToken), expiresAt, maxUses]
+      );
+
+      const invitation = invitationResult.rows[0];
+      const joinUrl = `/api/invitations/${rawToken}`;
+
+      return res.status(201).json({
+        invitation: {
+          id: invitation.id,
+          class_id: invitation.class_id,
+          organization_id: invitation.organization_id,
+          status: invitation.status,
+          expires_at: invitation.expires_at,
+          max_uses: invitation.max_uses,
+          use_count: invitation.use_count,
+          join_url: joinUrl,
+          token: rawToken,
+        },
+      });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return res.status(403).json({ error: { code: error.code, message: error.message } });
+      }
+
+      console.error("Create class invitation error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to create invitation." } });
+    }
+  });
+
+  app.get("/api/classes/:classId/invitations", requireAuth, async (req, res) => {
+    try {
+      const authRequest = req as AuthenticatedRequest;
+      const user = authRequest.user;
+      if (!user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const classId = typeof req.params?.classId === "string" ? req.params.classId.trim() : "";
+      if (!classId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Class id is required." } });
+      }
+
+      const classResult = await pool.query(
+        `SELECT c.id, c.organization_id
+         FROM classes c
+         WHERE c.id = $1
+         LIMIT 1`,
+        [classId]
+      );
+
+      if (classResult.rows.length === 0) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Class not found." } });
+      }
+
+      const organizationContext = await resolveOrganizationContext(req, user, classResult.rows[0].organization_id);
+      const isAdmin = ["SCHOOL_ADMIN", "COACHING_ADMIN"].includes(organizationContext.role.name);
+      if (!isAdmin) {
+        const teacherResult = await pool.query(
+          `SELECT t.id
+           FROM teachers t
+           JOIN class_teacher_assignments cta ON cta.teacher_id = t.id
+           WHERE t.user_id = $1
+             AND t.organization_id = $2
+             AND cta.class_id = $3
+           LIMIT 1`,
+          [user.id, classResult.rows[0].organization_id, classId]
+        );
+
+        if (teacherResult.rows.length === 0) {
+          return res.status(403).json({ error: { code: "FORBIDDEN", message: "You are not authorized to list invitations for this class." } });
+        }
+      }
+
+      const invitations = await pool.query(
+        `SELECT id, class_id, organization_id, status, expires_at, max_uses, use_count, created_at, updated_at
+         FROM class_invitations
+         WHERE class_id = $1
+         ORDER BY created_at DESC`,
+        [classId]
+      );
+
+      return res.status(200).json({ invitations: invitations.rows });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return res.status(403).json({ error: { code: error.code, message: error.message } });
+      }
+
+      console.error("List class invitations error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to list invitations." } });
+    }
+  });
+
+  app.delete("/api/classes/:classId/invitations/:invitationId", requireAuth, async (req, res) => {
+    try {
+      const authRequest = req as AuthenticatedRequest;
+      const user = authRequest.user;
+      if (!user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const classId = typeof req.params?.classId === "string" ? req.params.classId.trim() : "";
+      const invitationId = typeof req.params?.invitationId === "string" ? req.params.invitationId.trim() : "";
+      if (!classId || !invitationId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Class id and invitation id are required." } });
+      }
+
+      const invitationResult = await pool.query(
+        `SELECT ci.id, ci.organization_id, ci.class_id, ci.status
+         FROM class_invitations ci
+         WHERE ci.id = $1 AND ci.class_id = $2
+         LIMIT 1`,
+        [invitationId, classId]
+      );
+
+      if (invitationResult.rows.length === 0) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Invitation not found." } });
+      }
+
+      const invitation = invitationResult.rows[0];
+      const organizationContext = await resolveOrganizationContext(req, user, invitation.organization_id);
+      const isAdmin = ["SCHOOL_ADMIN", "COACHING_ADMIN"].includes(organizationContext.role.name);
+      if (!isAdmin) {
+        const teacherResult = await pool.query(
+          `SELECT t.id
+           FROM teachers t
+           JOIN class_teacher_assignments cta ON cta.teacher_id = t.id
+           WHERE t.user_id = $1
+             AND t.organization_id = $2
+             AND cta.class_id = $3
+           LIMIT 1`,
+          [user.id, invitation.organization_id, classId]
+        );
+
+        if (teacherResult.rows.length === 0) {
+          return res.status(403).json({ error: { code: "FORBIDDEN", message: "You are not authorized to revoke this invitation." } });
+        }
+      }
+
+      const revokedResult = await pool.query(
+        `UPDATE class_invitations
+         SET status = 'REVOKED', updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, status`,
+        [invitationId]
+      );
+
+      return res.status(200).json({ invitation: revokedResult.rows[0] });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return res.status(403).json({ error: { code: error.code, message: error.message } });
+      }
+
+      console.error("Revoke class invitation error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to revoke invitation." } });
+    }
+  });
+
+  app.get("/api/invitations/:token", async (req, res) => {
+    try {
+      const rawToken = typeof req.params?.token === "string" ? req.params.token.trim() : "";
+      if (!rawToken) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invitation token is required." } });
+      }
+
+      const tokenHash = hashInvitationToken(rawToken);
+      const result = await pool.query(
+        `SELECT ci.id,
+                ci.status,
+                ci.expires_at,
+                ci.max_uses,
+                ci.use_count,
+                c.name AS class_name,
+                c.section,
+                c.academic_year,
+                o.name AS organization_name,
+                o.slug AS organization_slug,
+                o.type AS organization_type,
+                o.status AS organization_status
+         FROM class_invitations ci
+         JOIN classes c ON c.id = ci.class_id
+         JOIN organizations o ON o.id = ci.organization_id
+         WHERE ci.token_hash = $1
+         LIMIT 1`,
+        [tokenHash]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: { code: "INVITATION_NOT_FOUND", message: "Invitation not found." } });
+      }
+
+      const invitation = result.rows[0];
+      if (invitation.organization_status !== "ACTIVE") {
+        return res.status(410).json({ error: { code: "INVITATION_INVALID", message: "Invitation is not valid for an active organization." } });
+      }
+
+      if (invitation.status !== "ACTIVE") {
+        return res.status(410).json({ error: { code: "INVITATION_INVALID", message: "Invitation is no longer active." } });
+      }
+
+      if (invitation.expires_at && new Date(invitation.expires_at) <= new Date()) {
+        return res.status(410).json({ error: { code: "INVITATION_EXPIRED", message: "Invitation has expired." } });
+      }
+
+      if (invitation.max_uses !== null && invitation.use_count >= invitation.max_uses) {
+        return res.status(410).json({ error: { code: "INVITATION_LIMIT_REACHED", message: "Invitation usage limit has been reached." } });
+      }
+
+      return res.status(200).json({
+        invitation: {
+          id: invitation.id,
+          status: invitation.status,
+          class: {
+            name: invitation.class_name,
+            section: invitation.section,
+            academic_year: invitation.academic_year,
+          },
+          organization: {
+            name: invitation.organization_name,
+            slug: invitation.organization_slug,
+            type: invitation.organization_type,
+          },
+          expires_at: invitation.expires_at,
+          max_uses: invitation.max_uses,
+          use_count: invitation.use_count,
+        },
+      });
+    } catch (error) {
+      console.error("Lookup invitation error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to load invitation." } });
+    }
+  });
+
+  app.post("/api/invitations/:token/join", requireAuth, async (req, res) => {
+    try {
+      const authRequest = req as AuthenticatedRequest;
+      const user = authRequest.user;
+      if (!user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const rawToken = typeof req.params?.token === "string" ? req.params.token.trim() : "";
+      if (!rawToken) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invitation token is required." } });
+      }
+
+      const tokenHash = hashInvitationToken(rawToken);
+      const invitationResult = await pool.query(
+        `SELECT ci.id,
+                ci.organization_id,
+                ci.class_id,
+                ci.status,
+                ci.expires_at,
+                ci.max_uses,
+                ci.use_count,
+                c.name AS class_name,
+                c.section,
+                c.academic_year,
+                o.name AS organization_name,
+                o.status AS organization_status,
+                o.type AS organization_type
+         FROM class_invitations ci
+         JOIN classes c ON c.id = ci.class_id
+         JOIN organizations o ON o.id = ci.organization_id
+         WHERE ci.token_hash = $1
+         LIMIT 1`,
+        [tokenHash]
+      );
+
+      if (invitationResult.rows.length === 0) {
+        return res.status(404).json({ error: { code: "INVITATION_NOT_FOUND", message: "Invitation not found." } });
+      }
+
+      const invitation = invitationResult.rows[0];
+      if (invitation.organization_status !== "ACTIVE") {
+        return res.status(410).json({ error: { code: "INVITATION_INVALID", message: "Invitation is not valid for an active organization." } });
+      }
+
+      if (invitation.status !== "ACTIVE") {
+        return res.status(410).json({ error: { code: "INVITATION_INVALID", message: "Invitation is no longer active." } });
+      }
+
+      if (invitation.expires_at && new Date(invitation.expires_at) <= new Date()) {
+        return res.status(410).json({ error: { code: "INVITATION_EXPIRED", message: "Invitation has expired." } });
+      }
+
+      if (invitation.max_uses !== null && invitation.use_count >= invitation.max_uses) {
+        return res.status(410).json({ error: { code: "INVITATION_LIMIT_REACHED", message: "Invitation usage limit has been reached." } });
+      }
+
+      const membershipResult = await pool.query(
+        `SELECT om.organization_id, r.name AS role_name
+         FROM organization_members om
+         JOIN roles r ON r.id = om.role_id
+         WHERE om.user_id = $1
+           AND om.status = 'ACTIVE'
+           AND om.organization_id = $2
+         LIMIT 1`,
+        [user.id, invitation.organization_id]
+      );
+
+      if (membershipResult.rows.length === 0 || membershipResult.rows[0].role_name !== "STUDENT") {
+        return res.status(403).json({ error: { code: "STUDENT_REQUIRED", message: "Only a student account can join with an invitation." } });
+      }
+
+      const studentResult = await pool.query(
+        `SELECT id, organization_id, user_id
+         FROM students_v2
+         WHERE user_id = $1 AND organization_id = $2
+         LIMIT 1`,
+        [user.id, invitation.organization_id]
+      );
+
+      if (studentResult.rows.length === 0) {
+        return res.status(403).json({ error: { code: "STUDENT_REQUIRED", message: "Student profile is required for this organization." } });
+      }
+
+      const studentRecord = studentResult.rows[0];
+      const existingEnrollment = await pool.query(
+        `SELECT id FROM student_enrollments
+         WHERE student_id = $1 AND class_id = $2 AND status = 'ACTIVE'
+         LIMIT 1`,
+        [studentRecord.id, invitation.class_id]
+      );
+
+      if (existingEnrollment.rows.length > 0) {
+        return res.status(409).json({ error: { code: "ALREADY_ENROLLED", message: "Student is already enrolled in this class." } });
+      }
+
+      const enrollmentResult = await pool.query(
+        `INSERT INTO student_enrollments (organization_id, student_id, class_id, academic_year, status)
+         VALUES ($1, $2, $3, $4, 'ACTIVE')
+         RETURNING id, organization_id, student_id, class_id, academic_year, status, enrolled_on, created_at, updated_at`,
+        [invitation.organization_id, studentRecord.id, invitation.class_id, invitation.academic_year]
+      );
+
+      await pool.query(
+        `UPDATE class_invitations
+         SET use_count = use_count + 1,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [invitation.id]
+      );
+
+      return res.status(201).json({ enrollment: enrollmentResult.rows[0] });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return res.status(403).json({ error: { code: error.code, message: error.message } });
+      }
+
+      console.error("Join class invitation error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to join class." } });
     }
   });
 
