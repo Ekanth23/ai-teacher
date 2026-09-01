@@ -24,6 +24,7 @@ import {
   hashRefreshToken,
   InvalidRefreshTokenError,
 } from "./auth/tokens.js";
+import curriculumRoutes from "./modules/curriculum/routes.js";
 
 const PORT = 3000;
 
@@ -58,6 +59,7 @@ export function createApp() {
 
   app.use(cors());
   app.use(express.json());
+  app.use(curriculumRoutes);
 
   app.get("/api/health", (req, res) => {
     res.json({
