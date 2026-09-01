@@ -1028,6 +1028,256 @@ export function createApp() {
     }
   });
 
+  app.get("/api/organizations/:orgId/subjects", requireAuth, async (req, res) => {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const orgId = typeof req.params?.orgId === "string" ? req.params.orgId.trim() : "";
+      if (!orgId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Organization id is required." } });
+      }
+
+      const organizationContext = await resolveOrganizationContext(req, user, orgId);
+      const result = await pool.query(
+        `SELECT id, organization_id, name, code, status, created_at, updated_at
+         FROM subjects
+         WHERE organization_id = $1
+         ORDER BY name ASC`,
+        [organizationContext.organization.id]
+      );
+
+      return res.status(200).json({ subjects: result.rows });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return res.status(403).json({ error: { code: error.code, message: error.message } });
+      }
+
+      console.error("List subjects error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to list subjects." } });
+    }
+  });
+
+  app.post("/api/organizations/:orgId/subjects", requireAuth, async (req, res) => {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const orgId = typeof req.params?.orgId === "string" ? req.params.orgId.trim() : "";
+      if (!orgId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Organization id is required." } });
+      }
+
+      const organizationContext = await resolveOrganizationContext(req, user, orgId);
+      const allowedRoles = ["SCHOOL_ADMIN", "COACHING_ADMIN"];
+      if (!allowedRoles.includes(organizationContext.role.name)) {
+        return res.status(403).json({ error: { code: "ROLE_REQUIRED", message: "You do not have permission to create subjects." } });
+      }
+
+      const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      if (!name) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Subject name is required." } });
+      }
+
+      const code = typeof req.body?.code === "string" && req.body.code.trim() ? req.body.code.trim() : null;
+
+      const result = await pool.query(
+        `INSERT INTO subjects (organization_id, name, code)
+         VALUES ($1, $2, $3)
+         RETURNING id, organization_id, name, code, status, created_at, updated_at`,
+        [organizationContext.organization.id, name, code]
+      );
+
+      return res.status(201).json({ subject: result.rows[0] });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return res.status(403).json({ error: { code: error.code, message: error.message } });
+      }
+
+      const errorCode = typeof error === "object" && error !== null && "code" in error ? String((error as { code?: string }).code) : "";
+      if (errorCode === "23505") {
+        return res.status(409).json({
+          error: {
+            code: "DUPLICATE_SUBJECT",
+            message: "A subject with the same name or code already exists in this organization.",
+          },
+        });
+      }
+
+      console.error("Create subject error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to create subject." } });
+    }
+  });
+
+  app.get("/api/classes/:classId/subjects", requireAuth, async (req, res) => {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const classId = typeof req.params?.classId === "string" ? req.params.classId.trim() : "";
+      if (!classId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Class id is required." } });
+      }
+
+      const classResult = await pool.query(`SELECT organization_id FROM classes WHERE id = $1 LIMIT 1`, [classId]);
+      if (classResult.rows.length === 0) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Class not found." } });
+      }
+
+      const organizationContext = await resolveOrganizationContext(req, user, classResult.rows[0].organization_id);
+      const result = await pool.query(
+        `SELECT cs.id,
+                cs.class_id,
+                cs.subject_id,
+                s.organization_id,
+                s.name,
+                s.code,
+                s.status,
+                s.created_at,
+                s.updated_at
+         FROM class_subjects cs
+         JOIN subjects s ON s.id = cs.subject_id
+         WHERE cs.class_id = $1 AND s.organization_id = $2
+         ORDER BY s.name ASC`,
+        [classId, organizationContext.organization.id]
+      );
+
+      return res.status(200).json({ subjects: result.rows });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return res.status(403).json({ error: { code: error.code, message: error.message } });
+      }
+
+      console.error("List class subjects error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to list class subjects." } });
+    }
+  });
+
+  app.post("/api/classes/:classId/subjects/:subjectId", requireAuth, async (req, res) => {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const classId = typeof req.params?.classId === "string" ? req.params.classId.trim() : "";
+      const subjectId = typeof req.params?.subjectId === "string" ? req.params.subjectId.trim() : "";
+      if (!classId || !subjectId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Class id and subject id are required." } });
+      }
+
+      const classResult = await pool.query(`SELECT organization_id FROM classes WHERE id = $1 LIMIT 1`, [classId]);
+      if (classResult.rows.length === 0) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Class not found." } });
+      }
+
+      const subjectResult = await pool.query(`SELECT organization_id FROM subjects WHERE id = $1 LIMIT 1`, [subjectId]);
+      if (subjectResult.rows.length === 0) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Subject not found." } });
+      }
+
+      const orgId = classResult.rows[0].organization_id;
+      if (subjectResult.rows[0].organization_id !== orgId) {
+        return res.status(403).json({ error: { code: "ORGANIZATION_MISMATCH", message: "Class and subject must belong to the same organization." } });
+      }
+
+      const organizationContext = await resolveOrganizationContext(req, user, orgId);
+      if (!["SCHOOL_ADMIN", "COACHING_ADMIN"].includes(organizationContext.role.name)) {
+        return res.status(403).json({ error: { code: "ROLE_REQUIRED", message: "You do not have permission to assign subjects to classes." } });
+      }
+
+      const existingResult = await pool.query(
+        `SELECT id FROM class_subjects WHERE class_id = $1 AND subject_id = $2 LIMIT 1`,
+        [classId, subjectId]
+      );
+      if (existingResult.rows.length > 0) {
+        return res.status(409).json({ error: { code: "DUPLICATE_CLASS_SUBJECT", message: "This subject is already assigned to the class." } });
+      }
+
+      const insertResult = await pool.query(
+        `INSERT INTO class_subjects (organization_id, class_id, subject_id)
+         VALUES ($1, $2, $3)
+         RETURNING id, organization_id, class_id, subject_id, created_at`,
+        [orgId, classId, subjectId]
+      );
+
+      return res.status(201).json({ class_subject: insertResult.rows[0] });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return res.status(403).json({ error: { code: error.code, message: error.message } });
+      }
+
+      const errorCode = typeof error === "object" && error !== null && "code" in error ? String((error as { code?: string }).code) : "";
+      if (errorCode === "23505") {
+        return res.status(409).json({ error: { code: "DUPLICATE_CLASS_SUBJECT", message: "This subject is already assigned to the class." } });
+      }
+
+      console.error("Assign subject to class error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to assign subject to class." } });
+    }
+  });
+
+  app.delete("/api/classes/:classId/subjects/:subjectId", requireAuth, async (req, res) => {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+      }
+
+      const classId = typeof req.params?.classId === "string" ? req.params.classId.trim() : "";
+      const subjectId = typeof req.params?.subjectId === "string" ? req.params.subjectId.trim() : "";
+      if (!classId || !subjectId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Class id and subject id are required." } });
+      }
+
+      const classResult = await pool.query(`SELECT organization_id FROM classes WHERE id = $1 LIMIT 1`, [classId]);
+      if (classResult.rows.length === 0) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Class not found." } });
+      }
+
+      const subjectResult = await pool.query(`SELECT organization_id FROM subjects WHERE id = $1 LIMIT 1`, [subjectId]);
+      if (subjectResult.rows.length === 0) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Subject not found." } });
+      }
+
+      const orgId = classResult.rows[0].organization_id;
+      if (subjectResult.rows[0].organization_id !== orgId) {
+        return res.status(403).json({ error: { code: "ORGANIZATION_MISMATCH", message: "Class and subject must belong to the same organization." } });
+      }
+
+      const organizationContext = await resolveOrganizationContext(req, user, orgId);
+      if (!["SCHOOL_ADMIN", "COACHING_ADMIN"].includes(organizationContext.role.name)) {
+        return res.status(403).json({ error: { code: "ROLE_REQUIRED", message: "You do not have permission to remove subjects from classes." } });
+      }
+
+      const deleteResult = await pool.query(
+        `DELETE FROM class_subjects
+         WHERE class_id = $1 AND subject_id = $2 AND organization_id = $3
+         RETURNING id, class_id, subject_id`,
+        [classId, subjectId, orgId]
+      );
+
+      if (deleteResult.rows.length === 0) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Class subject assignment not found." } });
+      }
+
+      return res.status(200).json({ success: true, class_subject: deleteResult.rows[0] });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        return res.status(403).json({ error: { code: error.code, message: error.message } });
+      }
+
+      console.error("Delete class subject error:", error);
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to remove subject from class." } });
+    }
+  });
+
   app.post("/api/classes/:id/teachers", requireAuth, async (req, res) => {
     try {
       const authRequest = req as AuthenticatedRequest;
