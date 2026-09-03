@@ -1,7 +1,9 @@
 import pool from "../../../db.js";
-import type { CreateAssessmentEventInput, CreateAssessmentPortionInput, CreateAssessmentSchemeComponentInput, CreateAssessmentSchemeInput } from "./types.js";
+import type { CreateAssessmentEventInput, CreateAssessmentPortionInput, CreateAssessmentSchemeComponentInput, CreateAssessmentSchemeInput, UpdateAssessmentEventInput } from "./types.js";
 
 export const createScheme = (i: CreateAssessmentSchemeInput) => pool.query(`INSERT INTO assessment_scheme_versions (board_id,academic_year_id,scheme_code,name,version,source_metadata,metadata) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`, [i.boardId,i.academicYearId??null,i.schemeCode,i.name,i.version,i.sourceMetadata??{},i.metadata??{}]);
+export const listAssessmentTypes = () => pool.query("SELECT id,code,name,description,status,metadata,created_at,updated_at FROM assessment_types WHERE status='ACTIVE' ORDER BY name,code");
+export const getPublishedScheme = (id: string) => pool.query("SELECT * FROM assessment_scheme_versions WHERE id=$1 AND status='PUBLISHED'", [id]);
 export const getScheme = (id: string) => pool.query("SELECT * FROM assessment_scheme_versions WHERE id=$1", [id]);
 export const listSchemes = (boardId?: string) => pool.query("SELECT * FROM assessment_scheme_versions WHERE status='PUBLISHED' AND ($1::uuid IS NULL OR board_id=$1) ORDER BY name,version", [boardId??null]);
 export const setSchemeStatus = (id: string, status: string) => pool.query("UPDATE assessment_scheme_versions SET status=$2,updated_at=now() WHERE id=$1 RETURNING *", [id,status]);
@@ -12,6 +14,13 @@ export const getEvent = (id: string) => pool.query("SELECT * FROM assessment_eve
 export const getEventForOrganization = (id: string, organizationId: string) => pool.query("SELECT * FROM assessment_events WHERE id=$1 AND organization_id=$2", [id, organizationId]);
 export const listEvents = (organizationId: string, academicYearId?: string) => pool.query("SELECT * FROM assessment_events WHERE organization_id=$1 AND ($2::uuid IS NULL OR academic_year_id=$2) ORDER BY scheduled_start", [organizationId,academicYearId??null]);
 export const setEventStatus = (id: string, status: string) => pool.query("UPDATE assessment_events SET status=$2,updated_at=now() WHERE id=$1 RETURNING *", [id,status]);
+export const updateEvent = (id: string, organizationId: string, input: UpdateAssessmentEventInput) => pool.query(
+  `UPDATE assessment_events SET subject_id=COALESCE($2,subject_id),calendar_id=COALESCE($3,calendar_id),
+   calendar_period_id=COALESCE($4,calendar_period_id),assessment_scheme_version_id=COALESCE($5,assessment_scheme_version_id),
+   assessment_type_id=COALESCE($6,assessment_type_id),title=COALESCE($7,title),scheduled_start=COALESCE($8,scheduled_start),
+   scheduled_end=COALESCE($9,scheduled_end),metadata=COALESCE($10,metadata),updated_at=now()
+   WHERE id=$1 AND organization_id=$11 RETURNING *`,
+  [id,input.subjectId ?? null,input.calendarId ?? null,input.calendarPeriodId ?? null,input.assessmentSchemeVersionId ?? null,input.assessmentTypeId ?? null,input.title ?? null,input.scheduledStart ?? null,input.scheduledEnd ?? null,input.metadata ?? null,organizationId]);
 export const createPortion = (i: CreateAssessmentPortionInput) => pool.query(`INSERT INTO assessment_event_curriculum_portions (assessment_event_id,curriculum_structure_id,curriculum_node_id,source_type,metadata) VALUES ($1,$2,$3,$4,$5) RETURNING *`, [i.assessmentEventId,i.curriculumStructureId,i.curriculumNodeId??null,i.sourceType??"BOARD_CURRICULUM",i.metadata??{}]);
 export const listPortions = (eventId: string) => pool.query("SELECT * FROM assessment_event_curriculum_portions WHERE assessment_event_id=$1 ORDER BY created_at,id", [eventId]);
 export const getPortionStructureContext = (structureId: string) => pool.query(
@@ -39,6 +48,7 @@ export const getAssessmentType = (id: string) => pool.query("SELECT id FROM asse
 export const getCurriculumVersion = (id: string) => pool.query("SELECT id, board_id FROM curriculum_versions WHERE id=$1", [id]);
 export const getPeriodForCalendar = (id: string, calendarId: string) => pool.query("SELECT id FROM academic_calendar_periods WHERE id=$1 AND calendar_id=$2", [id, calendarId]);
 export const addSchemeCurriculum = (schemeId: string, curriculumVersionId: string) => pool.query("INSERT INTO assessment_scheme_curriculum_versions (assessment_scheme_version_id,curriculum_version_id) VALUES ($1,$2) RETURNING *", [schemeId,curriculumVersionId]);
+export const deletePortionForEvent = (portionId: string, eventId: string) => pool.query("DELETE FROM assessment_event_curriculum_portions WHERE id=$1 AND assessment_event_id=$2 RETURNING *", [portionId,eventId]);
 export async function createEventWithPortions(event: CreateAssessmentEventInput, portions: CreateAssessmentPortionInput[]) {
   const client = await pool.connect();
   try {

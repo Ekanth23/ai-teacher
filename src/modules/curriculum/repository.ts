@@ -1,5 +1,17 @@
 import pool from "../../db.js";
 
+export type CurriculumClass = {
+  id: string;
+  organization_id: string;
+  name: string;
+  section: string | null;
+  academic_year: string | null;
+  status: string;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export async function listBoards() {
   return pool.query(
     `SELECT id, name, code, status, created_at, updated_at
@@ -37,7 +49,7 @@ export async function getMediumById(mediumId: string) {
 }
 
 export async function getClassById(classId: string) {
-  return pool.query(
+  return pool.query<CurriculumClass>(
     `SELECT id, organization_id, name, section, academic_year, status, created_by_user_id, created_at, updated_at
      FROM classes
      WHERE id = $1

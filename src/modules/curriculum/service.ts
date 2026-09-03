@@ -1,5 +1,8 @@
 import { AuthorizationError, isValidUuid, resolveOrganizationContext } from "../../auth/organization.js";
+import type { AuthenticatedUser } from "../../auth/tokens.js";
+import type { Request } from "express";
 import * as repository from "./repository.js";
+import type { CurriculumClass } from "./repository.js";
 
 const MANAGEMENT_ROLES = new Set(["SCHOOL_ADMIN", "COACHING_ADMIN"]);
 
@@ -61,7 +64,7 @@ export async function getMediumById(mediumId: string) {
   return result.rows[0];
 }
 
-export async function getClassForUser(req: any, user: any, classId: string, mode: "read" | "manage") {
+export async function getClassForUser(req: Request, user: AuthenticatedUser, classId: string, mode: "read" | "manage"): Promise<{ classRecord: CurriculumClass; organizationContext: Awaited<ReturnType<typeof resolveOrganizationContext>> }> {
   if (!classId || !isValidUuid(classId)) {
     throw new CurriculumValidationError("VALIDATION_ERROR", "Class id is invalid.");
   }

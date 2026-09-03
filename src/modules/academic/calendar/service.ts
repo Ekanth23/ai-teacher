@@ -18,18 +18,18 @@ async function validateReferences(input: CreateAcademicCalendarInput) {
   }
 }
 
-export async function list(req: Request, user: AuthenticatedUser) { const context = await resolveOrganizationContext(req, user); return (await repository.listCalendars(context.organization.id)).rows; }
-export async function get(req: Request, user: AuthenticatedUser, id: string) { const normalized = requiredUuid(id, "Calendar id"); const context = await resolveOrganizationContext(req, user); const row = (await repository.getCalendar(normalized)).rows[0]; if (!row) throw notFound("Calendar"); if (row.scope === "ORGANIZATION" && row.organization_id !== context.organization.id) throw new AuthorizationError("ORGANIZATION_ACCESS_DENIED", "You are not authorized to access this calendar."); return row; }
-export async function create(req: Request, user: AuthenticatedUser, input: CreateAcademicCalendarInput) {
+export async function list(req: Request, user: AuthenticatedUser, organizationId?: string) { const context = await resolveOrganizationContext(req, user, organizationId); return (await repository.listCalendars(context.organization.id)).rows; }
+export async function get(req: Request, user: AuthenticatedUser, id: string, organizationId?: string) { const normalized = requiredUuid(id, "Calendar id"); const context = await resolveOrganizationContext(req, user, organizationId); const row = (await repository.getCalendar(normalized)).rows[0]; if (!row) throw notFound("Calendar"); if (row.scope === "ORGANIZATION" && row.organization_id !== context.organization.id) throw new AuthorizationError("ORGANIZATION_ACCESS_DENIED", "You are not authorized to access this calendar."); return row; }
+export async function create(req: Request, user: AuthenticatedUser, input: CreateAcademicCalendarInput, organizationId?: string) {
   validateCalendarInput(input);
-  if (input.scope === "ORGANIZATION") { const context = await resolveOrganizationContext(req, user); management(context.role.name); input = { ...input, organizationId: context.organization.id }; }
+  if (input.scope === "ORGANIZATION") { const context = await resolveOrganizationContext(req, user, organizationId); management(context.role.name); input = { ...input, organizationId: context.organization.id }; }
   else management((await resolveOrganizationContext(req, user)).role.name);
   await validateReferences(input);
   return (await repository.createCalendar({ ...input, academicYearId: requiredUuid(input.academicYearId, "Academic year id"), calendarCode: input.calendarCode.trim(), name: input.name.trim(), version: input.version.trim() })).rows[0];
 }
-export async function update(req: Request, user: AuthenticatedUser, id: string, input: UpdateAcademicCalendarInput) {
+export async function update(req: Request, user: AuthenticatedUser, id: string, input: UpdateAcademicCalendarInput, organizationId?: string) {
   validateCalendarInput(input);
-  const calendar = await get(req, user, id);
+  const calendar = await get(req, user, id, organizationId);
   if (calendar.scope !== "ORGANIZATION") throw new AuthorizationError("ROLE_REQUIRED", "Reference calendars are not organization-editable.");
   const context = await resolveOrganizationContext(req, user, calendar.organization_id); management(context.role.name);
   if (input.academicYearId && !(await repository.academicYearExists(requiredUuid(input.academicYearId, "Academic year id"))).rows[0]) throw notFound("Academic year");
