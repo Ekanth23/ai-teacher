@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { AuthorizationError, type AuthenticatedRequest } from "../../auth/organization.js";
+import { AuthorizationError, requireRole, type AuthenticatedRequest } from "../../auth/organization.js";
 import { requireAuth } from "../../auth/middleware.js";
 import * as service from "./service.js";
 import * as architectureService from "./architecture/service.js";
+import * as configService from "./config/service.js";
 
 const router = Router();
 
@@ -153,6 +154,50 @@ router.get("/api/curriculum/node-types", requireAuth, async (_req, res) => {
 
 router.get("/api/curriculum/element-types", requireAuth, async (_req, res) => {
   return res.status(200).json({ elementTypes: await architectureService.listElementTypes() });
+});
+
+router.get("/api/curriculum/languages", requireAuth, async (_req, res) => res.json({ languages: await configService.listLanguages() }));
+router.get("/api/curriculum/academic-years", requireAuth, async (_req, res) => res.json({ academicYears: await configService.listAcademicYears() }));
+router.get("/api/curriculum/examination-years", requireAuth, async (_req, res) => res.json({ examinationYears: await configService.listExaminationYears() }));
+router.get("/api/curriculum/versions", requireAuth, async (req, res) => res.json({ versions: await configService.listVersions(typeof req.query.board_id === "string" ? req.query.board_id : undefined) }));
+router.get("/api/curriculum/reference-datasets", requireAuth, async (_req, res) => res.json({ datasets: await configService.listDatasets() }));
+router.get("/api/curriculum/reference-datasets/:id", requireAuth, async (req, res) => {
+  try { return res.json({ dataset: await configService.getDataset(getParam(req.params.id)) }); }
+  catch (error) { const response = getErrorResponse(error); return res.status(response.status).json(response.payload); }
+});
+router.post("/api/curriculum/reference-datasets/validate", requireAuth, requireRole(["SCHOOL_ADMIN", "COACHING_ADMIN"]), async (req, res) => {
+  try { return res.status(200).json(await configService.load(req.body, { dryRun: true })); }
+  catch (error) { const response = getErrorResponse(error); return res.status(response.status).json(response.payload); }
+});
+router.post("/api/curriculum/reference-datasets/load", requireAuth, requireRole(["SCHOOL_ADMIN", "COACHING_ADMIN"]), async (req, res) => {
+  try { return res.status(201).json(await configService.load(req.body, { publish: false })); }
+  catch (error) { const response = getErrorResponse(error); return res.status(response.status).json(response.payload); }
+});
+router.post("/api/curriculum/reference-datasets/:id/publish", requireAuth, requireRole(["SCHOOL_ADMIN", "COACHING_ADMIN"]), async (req, res) => {
+  try { return res.json({ dataset: await configService.publish(getParam(req.params.id)) }); }
+  catch (error) { const response = getErrorResponse(error); return res.status(response.status).json(response.payload); }
+});
+router.post("/api/syllabus-versions/:versionId/curriculum-version", requireAuth, async (req, res) => {
+  try { const user=(req as AuthenticatedRequest).user; if (!user) return res.status(401).json({error:{code:"INVALID_TOKEN",message:"Authentication required."}});
+    return res.json({ syllabusVersion: await configService.attachVersion(req,user,getParam(req.params.versionId),req.body?.curriculum_version_id) });
+  } catch (error) { const response=getErrorResponse(error); return res.status(response.status).json(response.payload); }
+});
+router.get("/api/syllabus-versions/:versionId/reference-datasets", requireAuth, async (req, res) => {
+  try { const user=(req as AuthenticatedRequest).user; if (!user) return res.status(401).json({error:{code:"INVALID_TOKEN",message:"Authentication required."}});
+    return res.json({ datasets: await configService.datasetsForVersion(req,user,getParam(req.params.versionId)) });
+  } catch (error) { const response=getErrorResponse(error); return res.status(response.status).json(response.payload); }
+});
+router.post("/api/syllabus-versions/:versionId/materialize", requireAuth, async (req,res) => {
+  try { const user=(req as AuthenticatedRequest).user; if(!user) return res.status(401).json({error:{code:"INVALID_TOKEN",message:"Authentication required."}}); return res.status(201).json({syllabusVersion:await configService.materialize(req,user,getParam(req.params.versionId),req.body?.dataset_id)}); }
+  catch(error){const response=getErrorResponse(error); return res.status(response.status).json(response.payload);}
+});
+router.get("/api/syllabus/:syllabusId/languages", requireAuth, async (req,res) => {
+  try { const user=(req as AuthenticatedRequest).user; if(!user) return res.status(401).json({error:{code:"INVALID_TOKEN",message:"Authentication required."}}); return res.json({languages:await configService.syllabusLanguages(req,user,getParam(req.params.syllabusId))}); }
+  catch(error){const response=getErrorResponse(error); return res.status(response.status).json(response.payload);}
+});
+router.post("/api/syllabus/:syllabusId/languages", requireAuth, async (req,res) => {
+  try { const user=(req as AuthenticatedRequest).user; if(!user) return res.status(401).json({error:{code:"INVALID_TOKEN",message:"Authentication required."}}); return res.status(201).json({language:await configService.addSyllabusLanguage(req,user,getParam(req.params.syllabusId),req.body?.code,req.body?.language_role ?? "CONTENT")}); }
+  catch(error){const response=getErrorResponse(error); return res.status(response.status).json(response.payload);}
 });
 
 router.get("/api/syllabus-versions/:versionId/structures", requireAuth, async (req, res) => {
