@@ -529,29 +529,29 @@ describe("organization membership and role authorization", () => {
       password: "StrongPassword123!",
       fullName: "Atomic Org User",
     });
-
     const slug = `atomic-org-${uniqueValue("slug")}`;
-    const triggerName = "test_fail_org_members_insert";
-    const functionName = "test_fail_org_members_insert_fn";
-
-    await pool.query(
-      `DROP TRIGGER IF EXISTS ${triggerName} ON organization_members; DROP FUNCTION IF EXISTS ${functionName}();`
-    );
-    await pool.query(
-      `CREATE FUNCTION ${functionName}() RETURNS trigger AS $$
-        BEGIN
-          RAISE EXCEPTION 'Simulated membership creation failure';
-        END;
-      $$ LANGUAGE plpgsql;`
-    );
-    await pool.query(
-      `CREATE TRIGGER ${triggerName}
-       BEFORE INSERT ON organization_members
-       FOR EACH ROW EXECUTE FUNCTION ${functionName}();`
-    );
+    const client = await pool.connect();
+    const originalQuery = client.query.bind(client);
+    const originalRelease = client.release.bind(client);
+    let released = false;
+    client.query = (async (statement: string, values?: unknown[]) => {
+      if (/^\s*INSERT\s+INTO\s+organization_members\b/i.test(statement)) {
+        throw new Error("Simulated membership creation failure");
+      }
+      return originalQuery(statement, values);
+    }) as typeof client.query;
+    client.release = () => {
+      released = true;
+      client.query = originalQuery as typeof client.query;
+      client.release = originalRelease;
+      originalRelease();
+    };
+    const atomicApp = createApp({
+      connect: async () => client,
+    });
 
     try {
-      const response = await request(app)
+      const response = await request(atomicApp)
         .post("/api/organizations")
         .set("Authorization", `Bearer ${accessToken}`)
         .send({
@@ -565,7 +565,10 @@ describe("organization membership and role authorization", () => {
       const check = await pool.query(`SELECT id FROM organizations WHERE slug = $1`, [slug]);
       expect(check.rows.length).toBe(0);
     } finally {
-      await pool.query(`DROP TRIGGER IF EXISTS ${triggerName} ON organization_members; DROP FUNCTION IF EXISTS ${functionName}();`);
+      if (!released) {
+        client.release = originalRelease;
+        originalRelease();
+      }
     }
   });
 

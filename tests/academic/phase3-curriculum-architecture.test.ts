@@ -82,20 +82,67 @@ describe("Phase 3 curriculum architecture", () => {
   });
 
   it("keeps syllabus and textbook structures as separate containers", async () => {
-    const versions = await pool.query("SELECT id FROM syllabus_versions ORDER BY created_at LIMIT 1");
-    if (versions.rows.length === 0) return;
-
-    const syllabus = await pool.query(
-      `INSERT INTO curriculum_structures (syllabus_version_id, structure_kind, name)
-       VALUES ($1, 'SYLLABUS', 'Phase 3 syllabus structure') RETURNING id`,
-      [versions.rows[0].id]
-    );
-    const textbook = await pool.query(
-      `INSERT INTO curriculum_structures (syllabus_version_id, structure_kind, name)
-       VALUES ($1, 'TEXTBOOK', 'Phase 3 textbook structure') RETURNING id`,
-      [versions.rows[0].id]
-    );
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    let userId: string | undefined;
+    let organizationId: string | undefined;
+    let classId: string | undefined;
+    let boardId: string | undefined;
+    let mediumId: string | undefined;
+    let syllabusId: string | undefined;
+    let syllabusVersionId: string | undefined;
     try {
+      const user = (await pool.query(
+        `INSERT INTO users (email, password_hash, full_name, status)
+         VALUES ($1, 'test-hash', 'Phase 3 structure owner', 'ACTIVE') RETURNING id`,
+        [`phase3_structure_${suffix}@example.com`]
+      )).rows[0];
+      userId = user.id;
+      const organization = (await pool.query(
+        `INSERT INTO organizations (name, slug, type, status, created_by_user_id)
+         VALUES ($1, $2, 'SCHOOL', 'ACTIVE', $3) RETURNING id`,
+        [`Phase 3 structure ${suffix}`, `phase3_structure_${suffix}`, userId]
+      )).rows[0];
+      organizationId = organization.id;
+      const classRecord = (await pool.query(
+        `INSERT INTO classes (organization_id, name, created_by_user_id)
+         VALUES ($1, 'Phase 3 structure class', $2) RETURNING id`,
+        [organizationId, userId]
+      )).rows[0];
+      classId = classRecord.id;
+      const board = (await pool.query(
+        `INSERT INTO boards (name, code, status)
+         VALUES ($1, $2, 'ACTIVE') RETURNING id`,
+        [`Phase 3 structure board ${suffix}`, `P3S${suffix}`]
+      )).rows[0];
+      boardId = board.id;
+      const medium = (await pool.query(
+        `INSERT INTO mediums (name, code, status)
+         VALUES ($1, $2, 'ACTIVE') RETURNING id`,
+        [`Phase 3 structure medium ${suffix}`, `P3S${suffix}`]
+      )).rows[0];
+      mediumId = medium.id;
+      const syllabusRecord = (await pool.query(
+        `INSERT INTO syllabi (class_id, board_id, medium_id, name, code)
+         VALUES ($1, $2, $3, 'Phase 3 structure syllabus', $4) RETURNING id`,
+        [classId, boardId, mediumId, `P3S${suffix}`]
+      )).rows[0];
+      syllabusId = syllabusRecord.id;
+      const version = (await pool.query(
+        `INSERT INTO syllabus_versions (syllabus_id, version, status)
+         VALUES ($1, '1', 'ACTIVE') RETURNING id`,
+        [syllabusId]
+      )).rows[0];
+      syllabusVersionId = version.id;
+      const syllabus = await pool.query(
+        `INSERT INTO curriculum_structures (syllabus_version_id, structure_kind, name)
+         VALUES ($1, 'SYLLABUS', 'Phase 3 syllabus structure') RETURNING id`,
+        [syllabusVersionId]
+      );
+      const textbook = await pool.query(
+        `INSERT INTO curriculum_structures (syllabus_version_id, structure_kind, name)
+         VALUES ($1, 'TEXTBOOK', 'Phase 3 textbook structure') RETURNING id`,
+        [syllabusVersionId]
+      );
       const result = await pool.query(
         `SELECT structure_kind FROM curriculum_structures
          WHERE id = ANY($1::uuid[]) ORDER BY structure_kind`,
@@ -103,7 +150,13 @@ describe("Phase 3 curriculum architecture", () => {
       );
       expect(result.rows.map((row) => row.structure_kind)).toEqual(["SYLLABUS", "TEXTBOOK"]);
     } finally {
-      await pool.query(`DELETE FROM curriculum_structures WHERE id = ANY($1::uuid[])`, [[syllabus.rows[0].id, textbook.rows[0].id]]);
+      if (syllabusVersionId) await pool.query("DELETE FROM syllabus_versions WHERE id = $1", [syllabusVersionId]);
+      if (syllabusId) await pool.query("DELETE FROM syllabi WHERE id = $1", [syllabusId]);
+      if (classId) await pool.query("DELETE FROM classes WHERE id = $1", [classId]);
+      if (organizationId) await pool.query("DELETE FROM organizations WHERE id = $1", [organizationId]);
+      if (userId) await pool.query("DELETE FROM users WHERE id = $1", [userId]);
+      if (boardId) await pool.query("DELETE FROM boards WHERE id = $1", [boardId]);
+      if (mediumId) await pool.query("DELETE FROM mediums WHERE id = $1", [mediumId]);
     }
   });
 

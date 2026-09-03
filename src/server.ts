@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import { pathToFileURL } from "node:url";
+import type { PoolClient } from "pg";
 import pool from "./db.js";
 import { InvalidCredentialsError, loginUser } from "./auth/login.js";
 import { requireAuth, type AuthenticatedRequest as BasicAuthenticatedRequest } from "./auth/middleware.js";
@@ -28,6 +29,9 @@ import curriculumRoutes from "./modules/curriculum/routes.js";
 import academicRoutes from "./modules/academic/routes.js";
 
 const PORT = 3000;
+type OrganizationDatabase = {
+  connect: () => Promise<PoolClient>;
+};
 
 function generateInvitationToken() {
   return crypto.randomBytes(32).toString("hex");
@@ -55,7 +59,7 @@ function parseInvitationExpiresAt(value: unknown) {
   return Number.isNaN(parsed.getTime()) ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : parsed;
 }
 
-export function createApp() {
+export function createApp(organizationDatabase: OrganizationDatabase = pool) {
   const app = express();
 
   app.use(cors());
@@ -641,7 +645,7 @@ export function createApp() {
       const slug = rawSlug.toLowerCase().replace(/\s+/g, "-");
       const adminRoleName = type === "SCHOOL" ? "SCHOOL_ADMIN" : "COACHING_ADMIN";
 
-      const client = await pool.connect();
+      const client = await organizationDatabase.connect();
       try {
         await client.query("BEGIN");
 
