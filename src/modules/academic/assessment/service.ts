@@ -80,17 +80,26 @@ export async function listEvents(req: Request, user: AuthenticatedUser, academic
 export async function getEvent(req: Request, user: AuthenticatedUser, id: string) { const normalized=uuid(id,"Assessment event id"); const context=await resolveOrganizationContext(req,user); const event=(await repository.getEventForOrganization(normalized,context.organization.id)).rows[0]; if(!event) throw notFound("Assessment event"); return event; }
 export async function changeEventStatus(req: Request, user: AuthenticatedUser, id: string, status: string) { if(!eventStatuses.has(status)) throw new AssessmentValidationError("Assessment event status is invalid."); const event=await getEvent(req,user,id); const context=await resolveOrganizationContext(req,user,event.organization_id); if(!["SCHOOL_ADMIN","COACHING_ADMIN","TEACHER"].includes(context.role.name)) throw new AuthorizationError("ROLE_REQUIRED","You do not have permission to update assessments."); if(!eventTransition(event.status,status)) throw new AssessmentValidationError(`Invalid event lifecycle transition: ${event.status} -> ${status}`); return (await repository.setEventStatus(event.id,status)).rows[0]; }
 export async function updateEvent(req: Request, user: AuthenticatedUser, id: string, input: UpdateAssessmentEventInput) { validateEventUpdate(input); const event = await getEvent(req, user, id); const context = await resolveOrganizationContext(req, user, event.organization_id); if (!["SCHOOL_ADMIN", "COACHING_ADMIN", "TEACHER"].includes(context.role.name)) throw new AuthorizationError("ROLE_REQUIRED", "You do not have permission to update assessments."); if (event.status === "COMPLETED" || event.status === "CANCELLED") throw new AssessmentValidationError("Historical assessment events cannot be modified."); const merged: CreateAssessmentEventInput = { organizationId: context.organization.id, academicYearId: event.academic_year_id, classId: event.class_id, subjectId: input.subjectId ?? event.subject_id, calendarId: input.calendarId ?? event.calendar_id, calendarPeriodId: input.calendarPeriodId ?? event.calendar_period_id, assessmentSchemeVersionId: input.assessmentSchemeVersionId ?? event.assessment_scheme_version_id, assessmentTypeId: input.assessmentTypeId ?? event.assessment_type_id, title: input.title ?? event.title, scheduledStart: input.scheduledStart ?? event.scheduled_start, scheduledEnd: input.scheduledEnd ?? event.scheduled_end, metadata: input.metadata ?? event.metadata }; validateEvent(merged); await validateEventReferences(merged, context.organization.id); return (await repository.updateEvent(event.id, context.organization.id, input)).rows[0]; }
-async function validatePortionAccess(req: Request, user: AuthenticatedUser, event: CreateAssessmentEventInput, portion: CreateAssessmentPortionInput, organizationId: string) {
+type AssessmentEventContext = CreateAssessmentEventInput & {
+  academic_year_id?: string;
+  class_id?: string;
+  assessment_scheme_version_id?: string | null;
+};
+
+async function validatePortionAccess(req: Request, user: AuthenticatedUser, event: AssessmentEventContext, portion: CreateAssessmentPortionInput, organizationId: string) {
+  const academicYearId = event.academicYearId ?? event.academic_year_id;
+  const classId = event.classId ?? event.class_id;
+  const assessmentSchemeVersionId = event.assessmentSchemeVersionId ?? event.assessment_scheme_version_id;
   const structure=(await repository.getPortionStructureContext(portion.curriculumStructureId)).rows[0]; if(!structure) throw notFound("Curriculum structure");
   if (structure.organization_id && structure.organization_id !== organizationId) throw new AuthorizationError("ORGANIZATION_ACCESS_DENIED","Curriculum structure belongs to another organization.");
-  const year=structure.syllabus_academic_year_id ?? structure.dataset_academic_year_id; if(year !== event.academicYearId) throw new AssessmentValidationError("Curriculum structure academic year must match the assessment event.");
-  if (event.assessmentSchemeVersionId) {
-    const scheme = (await repository.getScheme(event.assessmentSchemeVersionId)).rows[0];
+  const year=structure.syllabus_academic_year_id ?? structure.dataset_academic_year_id; if(year !== academicYearId) throw new AssessmentValidationError("Curriculum structure academic year must match the assessment event.");
+  if (assessmentSchemeVersionId) {
+    const scheme = (await repository.getScheme(assessmentSchemeVersionId)).rows[0];
     const board = structure.syllabus_board_id ?? structure.dataset_board_id;
     if (scheme && board && board !== scheme.board_id) throw new AssessmentValidationError("Curriculum structure board must match the assessment scheme.");
   }
   if (structure.class_id) {
-    if (structure.class_id !== event.classId) throw new AssessmentValidationError("Curriculum structure must belong to the assessment class.");
+    if (structure.class_id !== classId) throw new AssessmentValidationError("Curriculum structure must belong to the assessment class.");
     await curriculumService.getClassForUser(req, user, structure.class_id, "read");
   }
   if (portion.sourceType && portion.sourceType !== "BOARD_CURRICULUM") throw new AssessmentValidationError("This curriculum source type is not supported yet.");
