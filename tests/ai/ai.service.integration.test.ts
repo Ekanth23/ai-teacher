@@ -357,4 +357,46 @@ describe("ai.service provider abstraction integration", () => {
     expect(capturedPrompt).toContain("Previous conversation");
     expect(capturedPrompt).toBe(capturedPrompt.trim());
   });
+
+  it("captures the provider request id on successful usage events", async () => {
+    const tracker = new InMemoryUsageTracker();
+
+    await generateTutorReply(BASE_INPUT, {
+      provider: new MockLlmProvider(),
+      usageTracker: tracker,
+    });
+
+    const event = tracker.getEvents()[0];
+    expect(event?.requestId).toBe("mock-request-id");
+  });
+
+  it("prefers the application context.requestId over the provider request id", async () => {
+    const tracker = new InMemoryUsageTracker();
+
+    await generateTutorReply(BASE_INPUT, {
+      provider: new MockLlmProvider(),
+      usageTracker: tracker,
+      context: { requestId: "app-request-123" },
+    });
+
+    const event = tracker.getEvents()[0];
+    expect(event?.requestId).toBe("app-request-123");
+  });
+
+  it("records numeric latencyMs on failure usage events", async () => {
+    const tracker = new InMemoryUsageTracker();
+    const failing = createFailingMetadataProvider(
+      new Error("DeepSeek request failed with status 500 Internal Server Error")
+    );
+
+    await expect(
+      generateTutorReply(BASE_INPUT, { provider: failing, usageTracker: tracker })
+    ).rejects.toThrow();
+
+    expect(tracker.getEvents()).toHaveLength(1);
+    const event = tracker.getEvents()[0];
+    expect(event?.status).toBe("FAILURE");
+    expect(typeof event?.latencyMs).toBe("number");
+    expect(event?.latencyMs).toBeGreaterThanOrEqual(0);
+  });
 });

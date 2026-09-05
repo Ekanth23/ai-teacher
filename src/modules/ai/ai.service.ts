@@ -110,7 +110,7 @@ Give the best educational answer for the student, continuing the conversation na
     const result = await provider.generateWithMetadata(prompt, context);
 
     const event = createUsageEvent({
-      context,
+      context: { ...context, requestId: context.requestId ?? result.metadata.requestId },
       provider: result.metadata.provider,
       model: result.metadata.model,
       usage: result.metadata.usage,
@@ -128,6 +128,7 @@ Give the best educational answer for the student, continuing the conversation na
       context,
       provider: resolveAiProviderName(),
       model: "unknown",
+      latencyMs: performance.now() - startedAt,
       status: "FAILURE",
       errorCategory,
     });
