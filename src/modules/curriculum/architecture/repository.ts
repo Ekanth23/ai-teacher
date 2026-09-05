@@ -63,9 +63,17 @@ export const getMappingProfileSourceTarget = (profileId: string) => pool.query(
   [profileId]
 );
 export const createStructure = (input: StructureInput) => pool.query(
-  `INSERT INTO curriculum_structures (syllabus_version_id, structure_kind, name, reference_metadata)
-   VALUES ($1, $2, $3, $4) RETURNING *`,
-  [input.syllabusVersionId ?? null, input.structureKind, input.name, input.referenceMetadata ?? {}]
+  `INSERT INTO curriculum_structures (syllabus_version_id, structure_kind, name, reference_metadata, subject_id)
+   VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+  [input.syllabusVersionId ?? null, input.structureKind, input.name, input.referenceMetadata ?? {}, input.subjectId ?? null]
+);
+export const updateStructureSubject = (structureId: string, subjectId: string) => pool.query(
+  `UPDATE curriculum_structures SET subject_id = $2, updated_at = now() WHERE id = $1 RETURNING *`,
+  [structureId, subjectId]
+);
+export const classHasSubject = (organizationId: string, classId: string, subjectId: string) => pool.query(
+  "SELECT id FROM class_subjects WHERE organization_id = $1 AND class_id = $2 AND subject_id = $3 LIMIT 1",
+  [organizationId, classId, subjectId]
 );
 export const listStructures = (syllabusVersionId: string) => pool.query(
   "SELECT * FROM curriculum_structures WHERE syllabus_version_id = $1 ORDER BY created_at",

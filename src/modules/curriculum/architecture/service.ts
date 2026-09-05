@@ -41,12 +41,32 @@ function requiredText(value: string | null | undefined, field: string) {
 }
 export const listNodeTypes = async () => (await repository.listNodeTypes()).rows;
 export const listElementTypes = async () => (await repository.listElementTypes()).rows;
+async function ensureSubjectAssignedToClass(organizationId: string, classId: string, subjectId: string) {
+  const normalizedSubjectId = requiredUuid(subjectId, "Subject id");
+  const assignment = await repository.classHasSubject(organizationId, classId, normalizedSubjectId);
+  if (assignment.rows.length === 0) {
+    throw new ArchitectureValidationError("Subject is not assigned to this class.");
+  }
+  return normalizedSubjectId;
+}
+
 export async function createStructure(req: Request, user: AuthenticatedUser, input: StructureInput) {
   const name = requiredText(input.name, "Structure name");
   if (!["SYLLABUS", "TEXTBOOK"].includes(input.structureKind)) throw new ArchitectureValidationError("structureKind is invalid.");
   const syllabusVersionId = requiredUuid(input.syllabusVersionId, "Syllabus version id");
-  await ensureVersionAccess(req, user, syllabusVersionId, "manage");
-  return (await repository.createStructure({ ...input, syllabusVersionId, name })).rows[0];
+  const access = await ensureVersionAccess(req, user, syllabusVersionId, "manage");
+  let subjectId: string | null = null;
+  if (input.subjectId) {
+    subjectId = await ensureSubjectAssignedToClass(access.organizationContext.organization.id, access.classRecord.id, input.subjectId);
+  }
+  return (await repository.createStructure({ ...input, syllabusVersionId, name, subjectId })).rows[0];
+}
+
+export async function setStructureSubject(req: Request, user: AuthenticatedUser, structureId: string, subjectId: string) {
+  const normalizedStructureId = requiredUuid(structureId, "Structure id");
+  const access = await ensureStructureAccess(req, user, normalizedStructureId, "manage");
+  const normalizedSubjectId = await ensureSubjectAssignedToClass(access.organizationContext.organization.id, access.classRecord.id, subjectId);
+  return (await repository.updateStructureSubject(normalizedStructureId, normalizedSubjectId)).rows[0];
 }
 export async function listStructures(req: Request, user: AuthenticatedUser, versionId: string) {
   const normalizedId = requiredUuid(versionId, "Syllabus version id");

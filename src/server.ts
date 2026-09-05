@@ -1,3 +1,4 @@
+
 import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
@@ -28,6 +29,7 @@ import {
 } from "./auth/tokens.js";
 import curriculumRoutes from "./modules/curriculum/routes.js";
 import academicRoutes from "./modules/academic/routes.js";
+import contentRoutes from "./modules/content/routes.js";
 
 const PORT = 3000;
 type OrganizationDatabase = {
@@ -67,6 +69,7 @@ export function createApp(organizationDatabase: OrganizationDatabase = pool) {
   app.use(express.json());
   app.use(curriculumRoutes);
   app.use(academicRoutes);
+  app.use(contentRoutes);
   app.use("/api/ai", aiRoutes);
 
   app.get("/api/health", (req, res) => {
@@ -314,6 +317,7 @@ export function createApp(organizationDatabase: OrganizationDatabase = pool) {
       });
     }
   });
+
 
   app.post("/api/auth/login", async (req, res) => {
     try {

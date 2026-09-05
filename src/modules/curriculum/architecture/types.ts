@@ -16,6 +16,7 @@ export type StructureInput = {
   structureKind: "SYLLABUS" | "TEXTBOOK";
   name: string;
   referenceMetadata?: JsonObject;
+  subjectId?: string | null;
 };
 
 export type LearningElementInput = {

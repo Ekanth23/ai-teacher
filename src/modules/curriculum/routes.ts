@@ -4,6 +4,7 @@ import { requireAuth } from "../../auth/middleware.js";
 import * as service from "./service.js";
 import * as architectureService from "./architecture/service.js";
 import * as configService from "./config/service.js";
+import * as chaptersService from "./chapters/service.js";
 
 const router = Router();
 
@@ -220,8 +221,21 @@ router.post("/api/syllabus-versions/:versionId/structures", requireAuth, async (
       structureKind: req.body?.structure_kind,
       name: req.body?.name,
       referenceMetadata: req.body?.reference_metadata,
+      subjectId: req.body?.subject_id,
     });
     return res.status(201).json({ structure });
+  } catch (error) {
+    const response = getErrorResponse(error);
+    return res.status(response.status).json(response.payload);
+  }
+});
+
+router.patch("/api/curriculum/structures/:structureId/subject", requireAuth, async (req, res) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+    const structure = await architectureService.setStructureSubject(req, user, getParam(req.params.structureId), req.body?.subject_id);
+    return res.status(200).json({ structure });
   } catch (error) {
     const response = getErrorResponse(error);
     return res.status(response.status).json(response.payload);
@@ -367,6 +381,128 @@ router.post("/api/curriculum/mapping-profiles", requireAuth, async (req, res) =>
       rules: req.body?.rules,
     });
     return res.status(201).json({ mappingProfile: profile });
+  } catch (error) {
+    const response = getErrorResponse(error);
+    return res.status(response.status).json(response.payload);
+  }
+});
+
+router.get("/api/curriculum/structures/:structureId/chapters", requireAuth, async (req, res) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+    const chapters = await chaptersService.listChapters(req, user, getParam(req.params.structureId));
+    return res.status(200).json({ chapters, total: chapters.length });
+  } catch (error) {
+    const response = getErrorResponse(error);
+    return res.status(response.status).json(response.payload);
+  }
+});
+
+router.post("/api/curriculum/structures/:structureId/chapters", requireAuth, async (req, res) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+    const chapter = await chaptersService.createChapter(req, user, getParam(req.params.structureId), {
+      title: req.body?.title,
+      code: req.body?.code,
+      sequenceNumber: req.body?.sequence_number,
+      description: req.body?.description,
+      metadata: req.body?.metadata,
+    });
+    return res.status(201).json({ chapter });
+  } catch (error) {
+    const response = getErrorResponse(error);
+    return res.status(response.status).json(response.payload);
+  }
+});
+
+router.get("/api/curriculum/chapters/:chapterId", requireAuth, async (req, res) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+    const chapter = await chaptersService.getChapter(req, user, getParam(req.params.chapterId));
+    return res.status(200).json({ chapter });
+  } catch (error) {
+    const response = getErrorResponse(error);
+    return res.status(response.status).json(response.payload);
+  }
+});
+
+router.patch("/api/curriculum/chapters/:chapterId", requireAuth, async (req, res) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+    const chapter = await chaptersService.updateChapter(req, user, getParam(req.params.chapterId), {
+      title: req.body?.title,
+      code: req.body?.code,
+      sequenceNumber: req.body?.sequence_number,
+      description: req.body?.description,
+      metadata: req.body?.metadata,
+      status: req.body?.status,
+    });
+    return res.status(200).json({ chapter });
+  } catch (error) {
+    const response = getErrorResponse(error);
+    return res.status(response.status).json(response.payload);
+  }
+});
+
+router.get("/api/curriculum/chapters/:chapterId/topics", requireAuth, async (req, res) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+    const topics = await chaptersService.listTopics(req, user, getParam(req.params.chapterId));
+    return res.status(200).json({ topics, total: topics.length });
+  } catch (error) {
+    const response = getErrorResponse(error);
+    return res.status(response.status).json(response.payload);
+  }
+});
+
+router.post("/api/curriculum/chapters/:chapterId/topics", requireAuth, async (req, res) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+    const topic = await chaptersService.createTopic(req, user, getParam(req.params.chapterId), {
+      title: req.body?.title,
+      code: req.body?.code,
+      sequenceNumber: req.body?.sequence_number,
+      description: req.body?.description,
+      metadata: req.body?.metadata,
+    });
+    return res.status(201).json({ topic });
+  } catch (error) {
+    const response = getErrorResponse(error);
+    return res.status(response.status).json(response.payload);
+  }
+});
+
+router.get("/api/curriculum/topics/:topicId", requireAuth, async (req, res) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+    const topic = await chaptersService.getTopic(req, user, getParam(req.params.topicId));
+    return res.status(200).json({ topic });
+  } catch (error) {
+    const response = getErrorResponse(error);
+    return res.status(response.status).json(response.payload);
+  }
+});
+
+router.patch("/api/curriculum/topics/:topicId", requireAuth, async (req, res) => {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+    const topic = await chaptersService.updateTopic(req, user, getParam(req.params.topicId), {
+      title: req.body?.title,
+      code: req.body?.code,
+      sequenceNumber: req.body?.sequence_number,
+      description: req.body?.description,
+      metadata: req.body?.metadata,
+      status: req.body?.status,
+    });
+    return res.status(200).json({ topic });
   } catch (error) {
     const response = getErrorResponse(error);
     return res.status(response.status).json(response.payload);
