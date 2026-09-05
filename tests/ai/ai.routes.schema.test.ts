@@ -32,10 +32,10 @@ describe("ai.routes database schema reconciliation", () => {
     expect(source).toContain("grade_level AS grade");
   });
 
-  it("uses the canonical ai_conversations table with id/student_id/subject/topic", async () => {
+  it("uses the canonical ai_conversations table with id/organization_id/student_id/subject/topic", async () => {
     const source = await loadRouteSource();
     expect(source).toContain("FROM ai_conversations");
-    expect(source).toContain("SELECT id, student_id, subject, topic");
+    expect(source).toContain("SELECT id, organization_id, student_id, subject, topic");
     expect(source).not.toContain("FROM conversations ");
     expect(source).not.toContain("FROM conversations\n");
   });
@@ -57,5 +57,43 @@ describe("ai.routes database schema reconciliation", () => {
     expect(source).toContain('res.status(404)');
     expect(source).toContain('res.status(500)');
     expect(source).toContain("generateTutorReply");
+  });
+});
+
+describe("ai.routes authentication and tenant scoping", () => {
+  async function loadRouteSource(): Promise<string> {
+    return readFile(
+      new URL("../../src/modules/ai/ai.routes.ts", import.meta.url),
+      "utf-8"
+    );
+  }
+
+  it("requires authentication via requireAuth middleware", async () => {
+    const source = await loadRouteSource();
+    expect(source).toContain('router.post("/reply", requireAuth');
+    expect(source).toContain("requireAuth");
+  });
+
+  it("derives organization scope from the conversation record", async () => {
+    const source = await loadRouteSource();
+    expect(source).toContain("resolveOrganizationContext(req, user, conversation.organization_id)");
+  });
+
+  it("scopes the student lookup to the conversation's organization", async () => {
+    const source = await loadRouteSource();
+    expect(source).toContain("FROM students_v2");
+    expect(source).toContain("WHERE id = $1 AND organization_id = $2");
+  });
+
+  it("passes userId and organizationId into the LLM request context", async () => {
+    const source = await loadRouteSource();
+    expect(source).toContain("userId: user.id");
+    expect(source).toContain("organizationId: conversation.organization_id");
+  });
+
+  it("maps AuthorizationError to a 403 response", async () => {
+    const source = await loadRouteSource();
+    expect(source).toContain("error instanceof AuthorizationError");
+    expect(source).toContain('error.code === "INVALID_TOKEN" ? 401 : 403');
   });
 });

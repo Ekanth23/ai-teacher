@@ -1,12 +1,14 @@
 import { Router } from "express";
 import pool from "../../db.js";
+import { requireAuth } from "../../auth/middleware.js";
+import { AuthorizationError, resolveOrganizationContext, type AuthenticatedRequest } from "../../auth/organization.js";
 import { generateTutorReply } from "./ai.service.js";
 
 const router = Router();
 
 const HISTORY_LIMIT = 20;
 
-router.post("/reply", async (req, res) => {
+router.post("/reply", requireAuth, async (req, res) => {
   try {
     const { conversation_id, question } = req.body;
 
@@ -17,8 +19,16 @@ router.post("/reply", async (req, res) => {
       });
     }
 
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) {
+      return res.status(401).json({
+        status: "error",
+        message: "Authentication required.",
+      });
+    }
+
     const conversationResult = await pool.query(
-      `SELECT id, student_id, subject, topic
+      `SELECT id, organization_id, student_id, subject, topic
        FROM ai_conversations
        WHERE id = $1`,
       [conversation_id]
@@ -33,11 +43,13 @@ router.post("/reply", async (req, res) => {
       });
     }
 
+    await resolveOrganizationContext(req, user, conversation.organization_id);
+
     const studentResult = await pool.query(
       `SELECT id, full_name AS name, grade_level AS grade
        FROM students_v2
-       WHERE id = $1`,
-      [conversation.student_id]
+       WHERE id = $1 AND organization_id = $2`,
+      [conversation.student_id, conversation.organization_id]
     );
 
     const student = studentResult.rows[0];
@@ -72,6 +84,8 @@ router.post("/reply", async (req, res) => {
         context: {
           conversationId: String(conversation_id),
           studentId: String(conversation.student_id),
+          userId: user.id,
+          organizationId: conversation.organization_id,
         },
       }
     );
@@ -89,6 +103,13 @@ router.post("/reply", async (req, res) => {
       data: result.rows[0],
     });
   } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return res.status(error.code === "INVALID_TOKEN" ? 401 : 403).json({
+        status: "error",
+        message: error.message,
+      });
+    }
+
     console.error("AI reply error:", error);
 
     res.status(500).json({
