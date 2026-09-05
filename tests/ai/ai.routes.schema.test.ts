@@ -96,4 +96,10 @@ describe("ai.routes authentication and tenant scoping", () => {
     expect(source).toContain("error instanceof AuthorizationError");
     expect(source).toContain('error.code === "INVALID_TOKEN" ? 401 : 403');
   });
+
+  it("wires the persistent usage tracker into the reply flow", async () => {
+    const source = await loadRouteSource();
+    expect(source).toContain("PostgresUsageTracker");
+    expect(source).toContain("usageTracker");
+  });
 });

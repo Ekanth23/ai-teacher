@@ -3,10 +3,12 @@ import pool from "../../db.js";
 import { requireAuth } from "../../auth/middleware.js";
 import { AuthorizationError, resolveOrganizationContext, type AuthenticatedRequest } from "../../auth/organization.js";
 import { generateTutorReply } from "./ai.service.js";
+import { PostgresUsageTracker } from "./usage/postgres.usage.tracker.js";
 
 const router = Router();
 
 const HISTORY_LIMIT = 20;
+const usageTracker = new PostgresUsageTracker();
 
 router.post("/reply", requireAuth, async (req, res) => {
   try {
@@ -87,6 +89,7 @@ router.post("/reply", requireAuth, async (req, res) => {
           userId: user.id,
           organizationId: conversation.organization_id,
         },
+        usageTracker,
       }
     );
 
