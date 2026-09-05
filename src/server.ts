@@ -7,6 +7,7 @@ import pool from "./db.js";
 import { InvalidCredentialsError, loginUser } from "./auth/login.js";
 import { requireAuth, type AuthenticatedRequest as BasicAuthenticatedRequest } from "./auth/middleware.js";
 import { DuplicateUserError, ValidationError, registerUser } from "./auth/register.js";
+import aiRoutes from "./modules/ai/ai.routes.js";
 import {
   AuthorizationError,
   getUserOrganizations,
@@ -66,6 +67,7 @@ export function createApp(organizationDatabase: OrganizationDatabase = pool) {
   app.use(express.json());
   app.use(curriculumRoutes);
   app.use(academicRoutes);
+  app.use("/api/ai", aiRoutes);
 
   app.get("/api/health", (req, res) => {
     res.json({
@@ -309,35 +311,6 @@ export function createApp(organizationDatabase: OrganizationDatabase = pool) {
       res.status(500).json({
         status: "error",
         message: "Failed to get messages",
-      });
-    }
-  });
-
-  app.post("/api/ai/reply", async (req, res) => {
-    try {
-      const { conversation_id, question } = req.body;
-
-      const aiAnswer =
-        "Fractions represent parts of a whole. For example, 1/2 means one out of two equal parts.";
-
-      const result = await pool.query(
-        `INSERT INTO messages (conversation_id, role, content)
-         VALUES ($1, $2, $3)
-         RETURNING *`,
-        [conversation_id, "assistant", aiAnswer]
-      );
-
-      res.status(201).json({
-        status: "success",
-        message: "AI reply created successfully",
-        data: result.rows[0],
-      });
-    } catch (error) {
-      console.error("AI reply error:", error);
-
-      res.status(500).json({
-        status: "error",
-        message: "Failed to generate AI reply",
       });
     }
   });
