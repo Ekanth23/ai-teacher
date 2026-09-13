@@ -9,5 +9,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     css: true,
+    // Playwright E2E specs live outside Vitest's domain.
+    exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
   },
 });
