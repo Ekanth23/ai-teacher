@@ -72,7 +72,7 @@ export const updateStructureSubject = (structureId: string, subjectId: string) =
   [structureId, subjectId]
 );
 export const classHasSubject = (organizationId: string, classId: string, subjectId: string) => pool.query(
-  "SELECT id FROM class_subjects WHERE organization_id = $1 AND class_id = $2 AND subject_id = $3 LIMIT 1",
+  "SELECT id FROM class_subjects WHERE organization_id = $1 AND class_id = $2 AND subject_id = $3 AND status = 'ACTIVE' LIMIT 1",
   [organizationId, classId, subjectId]
 );
 export const listStructures = (syllabusVersionId: string) => pool.query(
@@ -153,7 +153,7 @@ export const listMappingProfiles = (organizationId: string, userId: string, role
          SELECT 1
          FROM class_teacher_assignments cta
          JOIN teachers t ON t.id = cta.teacher_id
-         WHERE cta.class_id = c.id AND t.organization_id = c.organization_id AND t.user_id = $2
+         WHERE cta.class_id = c.id AND t.organization_id = c.organization_id AND t.user_id = $2 AND cta.status = 'ACTIVE'
        )
        OR (
          $3 = 'STUDENT'

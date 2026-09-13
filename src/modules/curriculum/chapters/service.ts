@@ -15,6 +15,12 @@ const notFound = (name: string) => {
   return error;
 };
 
+const duplicate = (code: string, message: string) => {
+  const error = new ChapterValidationError(message);
+  error.code = code;
+  return error;
+};
+
 function requiredUuid(value: string | null | undefined, field: string) {
   if (!value || !isValidUuid(value)) throw new ChapterValidationError(`${field} is invalid.`);
   return value.trim();
@@ -85,12 +91,17 @@ export async function createChapter(req: Request, user: AuthenticatedUser, struc
   const { structureId: normalized, subjectId } = await ensureStructureAccess(req, user, structureId, "manage");
   requireSubjectLinked(subjectId, "chapters");
   const nodeType = await requireNodeType("CHAPTER", "Chapter");
+  const title = requiredText(input.title, "Title");
+  const duplicateResult = await repository.findChapterByTitle(normalized, title);
+  if (duplicateResult.rows.length > 0) {
+    throw duplicate("DUPLICATE_CHAPTER", "A chapter with this title already exists in this curriculum structure.");
+  }
   return (
     await repository.createNode({
       curriculumStructureId: normalized,
       parentNodeId: null,
       nodeTypeId: nodeType.id,
-      title: requiredText(input.title, "Title"),
+      title,
       code: input.code ?? null,
       sequenceNumber: input.sequenceNumber ?? null,
       description: input.description ?? null,
@@ -109,6 +120,13 @@ export async function updateChapter(req: Request, user: AuthenticatedUser, chapt
   validateNodeInput(input, { partial: true });
   const node = await loadNodeOfType(chapterId, "CHAPTER", "Chapter");
   await ensureNodeAccess(req, user, node, "manage");
+  if (input.title !== undefined) {
+    const title = requiredText(input.title, "Title");
+    const duplicateResult = await repository.findChapterByTitle(node.curriculum_structure_id, title, node.id);
+    if (duplicateResult.rows.length > 0) {
+      throw duplicate("DUPLICATE_CHAPTER", "A chapter with this title already exists in this curriculum structure.");
+    }
+  }
   return (await repository.updateNode(node.id, input)).rows[0];
 }
 
@@ -124,12 +142,17 @@ export async function createTopic(req: Request, user: AuthenticatedUser, chapter
   await ensureNodeAccess(req, user, chapter, "manage");
   requireSubjectLinked(chapter.subject_id, "topics");
   const nodeType = await requireNodeType("TOPIC", "Topic");
+  const title = requiredText(input.title, "Title");
+  const duplicateResult = await repository.findTopicByTitle(chapter.id, title);
+  if (duplicateResult.rows.length > 0) {
+    throw duplicate("DUPLICATE_TOPIC", "A topic with this title already exists in this chapter.");
+  }
   return (
     await repository.createNode({
       curriculumStructureId: chapter.curriculum_structure_id,
       parentNodeId: chapter.id,
       nodeTypeId: nodeType.id,
-      title: requiredText(input.title, "Title"),
+      title,
       code: input.code ?? null,
       sequenceNumber: input.sequenceNumber ?? null,
       description: input.description ?? null,
@@ -148,5 +171,12 @@ export async function updateTopic(req: Request, user: AuthenticatedUser, topicId
   validateNodeInput(input, { partial: true });
   const node = await loadNodeOfType(topicId, "TOPIC", "Topic");
   await ensureNodeAccess(req, user, node, "manage");
+  if (input.title !== undefined && node.parent_node_id) {
+    const title = requiredText(input.title, "Title");
+    const duplicateResult = await repository.findTopicByTitle(node.parent_node_id, title, node.id);
+    if (duplicateResult.rows.length > 0) {
+      throw duplicate("DUPLICATE_TOPIC", "A topic with this title already exists in this chapter.");
+    }
+  }
   return (await repository.updateNode(node.id, input)).rows[0];
 }

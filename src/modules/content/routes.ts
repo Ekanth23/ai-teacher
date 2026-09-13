@@ -27,6 +27,7 @@ function errorResponse(error: unknown) {
     const message = (error as { message?: string }).message ?? "An unexpected error occurred.";
     if (code === "VALIDATION_ERROR") return { status: 400, payload: { error: { code, message } } };
     if (code === "NOT_FOUND") return { status: 404, payload: { error: { code, message } } };
+    if (code === "DUPLICATE_LEARNING_RESOURCE") return { status: 409, payload: { error: { code, message } } };
     if (code === "23505") return { status: 409, payload: { error: { code: "DUPLICATE_RESOURCE", message: "A resource with the same identity already exists." } } };
   }
 

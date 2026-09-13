@@ -16,6 +16,7 @@ export const teacherAssignedToClass = (classId: string, organizationId: string, 
        AND t.organization_id = $2
        AND t.user_id = $3
        AND t.status = 'ACTIVE'
+       AND cta.status = 'ACTIVE'
      LIMIT 1`,
     [classId, organizationId, userId]
   );
@@ -33,6 +34,18 @@ export const nodeOrganization = (nodeId: string) =>
     [nodeId]
   );
 
+export const findResourceByTopicAndTitle = (organizationId: string, curriculumNodeId: string, title: string, excludeId?: string) =>
+  pool.query(
+    `SELECT id
+     FROM learning_resources
+     WHERE organization_id = $1
+       AND curriculum_node_id = $2
+       AND lower(title) = lower($3)
+       AND ($4::uuid IS NULL OR id <> $4)
+     LIMIT 1`,
+    [organizationId, curriculumNodeId, title, excludeId ?? null]
+  );
+
 export const getResource = (id: string) => pool.query("SELECT * FROM learning_resources WHERE id = $1 LIMIT 1", [id]);
 
 export const isClassMember = (classId: string, userId: string, organizationId: string) =>
@@ -40,7 +53,7 @@ export const isClassMember = (classId: string, userId: string, organizationId: s
     `SELECT 1 AS member WHERE EXISTS (
        SELECT 1 FROM class_teacher_assignments cta
        JOIN teachers t ON t.id = cta.teacher_id
-       WHERE cta.class_id = $1 AND t.organization_id = $3 AND t.user_id = $2
+       WHERE cta.class_id = $1 AND t.organization_id = $3 AND t.user_id = $2 AND cta.status = 'ACTIVE'
      ) OR EXISTS (
        SELECT 1 FROM student_enrollments se
        JOIN students_v2 st ON st.id = se.student_id
@@ -110,7 +123,7 @@ export function listResources(params: ListResourcesParams) {
               EXISTS (
                 SELECT 1 FROM class_teacher_assignments cta
                 JOIN teachers t ON t.id = cta.teacher_id
-                WHERE cta.class_id = lr.class_id AND t.organization_id = lr.organization_id AND t.user_id = $${userIdx}
+                WHERE cta.class_id = lr.class_id AND t.organization_id = lr.organization_id AND t.user_id = $${userIdx} AND cta.status = 'ACTIVE'
               )
               OR EXISTS (
                 SELECT 1 FROM student_enrollments se

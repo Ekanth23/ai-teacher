@@ -3,6 +3,7 @@ import { requireAuth } from "../../auth/middleware.js";
 import { AuthorizationError, type AuthenticatedRequest } from "../../auth/organization.js";
 import * as assessmentService from "./assessment/service.js";
 import * as calendarService from "./calendar/service.js";
+import * as assignmentService from "./assignments/service.js";
 
 const router = Router();
 
@@ -147,6 +148,92 @@ router.post("/api/assessment-events/:eventId/curriculum-portions", requireAuth, 
 router.delete("/api/assessment-events/:eventId/curriculum-portions/:portionId", requireAuth, handler(
   (req) => assessmentService.deletePortion(req, userFor(req), param(req.params.eventId), param(req.params.portionId)),
   "curriculumPortion"
+));
+
+router.post("/api/assignments", requireAuth, handler(
+  (req) => assignmentService.create(req, userFor(req), {
+    classId: req.body?.class_id,
+    subjectId: req.body?.subject_id,
+    curriculumNodeId: req.body?.curriculum_node_id,
+    title: req.body?.title,
+    description: req.body?.description,
+    dueAt: req.body?.due_at,
+  }),
+  "assignment",
+  201
+));
+
+router.patch("/api/assignments/:assignmentId", requireAuth, handler(
+  (req) => assignmentService.update(req, userFor(req), param(req.params.assignmentId), {
+    title: req.body?.title,
+    description: req.body?.description,
+    classId: req.body?.class_id,
+    subjectId: req.body?.subject_id,
+    curriculumNodeId: req.body?.curriculum_node_id,
+    dueAt: req.body?.due_at,
+  }),
+  "assignment"
+));
+
+router.post("/api/assignments/:assignmentId/publish", requireAuth, handler(
+  (req) => assignmentService.publish(req, userFor(req), param(req.params.assignmentId)),
+  "assignment"
+));
+
+router.post("/api/assignments/:assignmentId/open", requireAuth, handler(
+  (req) => assignmentService.open(req, userFor(req), param(req.params.assignmentId)),
+  "assignment"
+));
+
+router.post("/api/assignments/:assignmentId/close", requireAuth, handler(
+  (req) => assignmentService.close(req, userFor(req), param(req.params.assignmentId)),
+  "assignment"
+));
+
+router.get("/api/student/assignments", requireAuth, handler(async (req) => {
+  const assignments = await assignmentService.listForStudent(req, userFor(req));
+  return { assignments, total: assignments.length };
+}));
+
+router.get("/api/student/assignments/:assignmentId", requireAuth, handler(
+  (req) => assignmentService.getForStudent(req, userFor(req), param(req.params.assignmentId)),
+  "assignment"
+));
+
+router.post("/api/student/assignments/:assignmentId/submissions", requireAuth, handler(
+  (req) => assignmentService.submit(req, userFor(req), param(req.params.assignmentId), { content: req.body?.content }),
+  "submission",
+  201
+));
+
+router.get("/api/student/assignments/:assignmentId/completion", requireAuth, handler(
+  (req) => assignmentService.getCompletion(req, userFor(req), param(req.params.assignmentId)),
+  "completion"
+));
+
+router.get("/api/student/assignments/:assignmentId/overdue", requireAuth, handler(
+  (req) => assignmentService.getOverdue(req, userFor(req), param(req.params.assignmentId)),
+  "overdue"
+));
+
+router.get("/api/assignments/:assignmentId/submissions", requireAuth, handler(async (req) => {
+  const submissions = await assignmentService.listSubmissions(req, userFor(req), param(req.params.assignmentId));
+  return { submissions, total: submissions.length };
+}));
+
+router.get("/api/assignments/:assignmentId/submissions/:submissionId", requireAuth, handler(
+  (req) => assignmentService.reviewSubmission(req, userFor(req), param(req.params.assignmentId), param(req.params.submissionId)),
+  "submission"
+));
+
+router.patch("/api/assignments/:assignmentId/submissions/:submissionId/review", requireAuth, handler(
+  (req) => assignmentService.recordReviewDecision(req, userFor(req), param(req.params.assignmentId), param(req.params.submissionId), { decision: req.body?.decision }),
+  "submission"
+));
+
+router.patch("/api/assignments/:assignmentId/submissions/:submissionId/feedback", requireAuth, handler(
+  (req) => assignmentService.recordFeedback(req, userFor(req), param(req.params.assignmentId), param(req.params.submissionId), { feedback: req.body?.feedback }),
+  "submission"
 ));
 
 export default router;

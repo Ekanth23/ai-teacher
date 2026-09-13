@@ -135,6 +135,7 @@ export async function findTeacherAssignment(classId: string, organizationId: str
      WHERE cta.class_id = $1
        AND t.organization_id = $2
        AND t.user_id = $3
+       AND cta.status = 'ACTIVE'
      LIMIT 1`,
     [classId, organizationId, userId]
   );

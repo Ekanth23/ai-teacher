@@ -40,6 +40,33 @@ export const listChildNodesByType = (structureId: string, nodeTypeCode: string, 
     [structureId, nodeTypeCode, parentNodeId]
   );
 
+export const findChapterByTitle = (structureId: string, title: string, excludeNodeId?: string) =>
+  pool.query(
+    `SELECT n.id
+     FROM curriculum_nodes n
+     JOIN curriculum_node_types t ON t.id = n.node_type_id
+     WHERE n.curriculum_structure_id = $1
+       AND lower(t.code) = 'chapter'
+       AND n.parent_node_id IS NULL
+       AND lower(n.title) = lower($2)
+       AND ($3::uuid IS NULL OR n.id <> $3)
+     LIMIT 1`,
+    [structureId, title, excludeNodeId ?? null]
+  );
+
+export const findTopicByTitle = (parentNodeId: string, title: string, excludeNodeId?: string) =>
+  pool.query(
+    `SELECT n.id
+     FROM curriculum_nodes n
+     JOIN curriculum_node_types t ON t.id = n.node_type_id
+     WHERE n.parent_node_id = $1
+       AND lower(t.code) = 'topic'
+       AND lower(n.title) = lower($2)
+       AND ($3::uuid IS NULL OR n.id <> $3)
+     LIMIT 1`,
+    [parentNodeId, title, excludeNodeId ?? null]
+  );
+
 export const createNode = (input: CreateNodeInput) =>
   pool.query(
     `WITH inserted AS (

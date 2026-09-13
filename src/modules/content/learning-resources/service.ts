@@ -14,6 +14,12 @@ const notFound = (name: string) => {
   return error;
 };
 
+const duplicate = (message: string) => {
+  const error = new LearningResourceValidationError(message);
+  error.code = "DUPLICATE_LEARNING_RESOURCE";
+  return error;
+};
+
 function requireContributor(role: string) {
   if (!CONTRIBUTOR_ROLES.has(role)) {
     throw new AuthorizationError("ROLE_REQUIRED", "You do not have permission to manage learning resources.");
@@ -115,13 +121,21 @@ export async function create(req: Request, user: AuthenticatedUser, organization
   if (context.role.name === "TEACHER" && input.classId) {
     await ensureTeacherClassAccess(input.classId, context.organization.id, user);
   }
+  const title = input.title.trim();
+  const fileUrl = input.fileUrl.trim();
+  if (input.curriculumNodeId) {
+    const duplicateResult = await repository.findResourceByTopicAndTitle(context.organization.id, input.curriculumNodeId, title);
+    if (duplicateResult.rows.length > 0) {
+      throw duplicate("A learning resource with this title already exists for this topic.");
+    }
+  }
   return (
     await repository.createResource({
       ...input,
       organizationId: context.organization.id,
       createdByUserId: user.id,
-      title: input.title.trim(),
-      fileUrl: input.fileUrl.trim(),
+      title,
+      fileUrl,
     })
   ).rows[0];
 }
@@ -142,6 +156,15 @@ export async function update(req: Request, user: AuthenticatedUser, resourceId: 
   }
   if (input.curriculumNodeId) await ensureNodeInOrganization(input.curriculumNodeId, context.organization.id);
   if (input.classId) await ensureClassInOrganization(input.classId, context.organization.id);
+  if (input.title !== undefined) {
+    const effectiveNodeId = input.curriculumNodeId ?? resource.curriculum_node_id;
+    if (effectiveNodeId) {
+      const duplicateResult = await repository.findResourceByTopicAndTitle(resource.organization_id, effectiveNodeId, input.title.trim(), resource.id);
+      if (duplicateResult.rows.length > 0) {
+        throw duplicate("A learning resource with this title already exists for this topic.");
+      }
+    }
+  }
   return (await repository.updateResource(resource.id, input)).rows[0];
 }
 

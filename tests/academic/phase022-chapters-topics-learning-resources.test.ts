@@ -261,6 +261,93 @@ describe("Phase 022 chapter/topic and learning-resource APIs", () => {
     expect(outsiderCreateTopic.status).toBe(403);
   });
 
+  it("rejects duplicate chapter titles within a structure (case-insensitive)", async () => {
+    const f = await fixture();
+    const agent = request(app);
+
+    const first = await agent
+      .post(`/api/curriculum/structures/${f.structureId}/chapters`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Chapter 2: Algebra" });
+    expect(first.status).toBe(201);
+    created.nodes.push(first.body.chapter.id);
+
+    const duplicateCreate = await agent
+      .post(`/api/curriculum/structures/${f.structureId}/chapters`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "chapter 2: algebra" });
+    expect(duplicateCreate.status).toBe(409);
+    expect(duplicateCreate.body.error.code).toBe("DUPLICATE_CHAPTER");
+
+    const second = await agent
+      .post(`/api/curriculum/structures/${f.structureId}/chapters`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Chapter 3: Geometry" });
+    expect(second.status).toBe(201);
+    created.nodes.push(second.body.chapter.id);
+
+    const duplicateUpdate = await agent
+      .patch(`/api/curriculum/chapters/${second.body.chapter.id}`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Chapter 2: Algebra" });
+    expect(duplicateUpdate.status).toBe(409);
+    expect(duplicateUpdate.body.error.code).toBe("DUPLICATE_CHAPTER");
+
+    // Renaming a chapter to the same title (no change) is allowed.
+    const noOpUpdate = await agent
+      .patch(`/api/curriculum/chapters/${second.body.chapter.id}`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Chapter 3: Geometry" });
+    expect(noOpUpdate.status).toBe(200);
+  });
+
+  it("rejects duplicate topic titles within a chapter (case-insensitive)", async () => {
+    const f = await fixture();
+    const agent = request(app);
+
+    const chapter = await agent
+      .post(`/api/curriculum/structures/${f.structureId}/chapters`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Chapter: Fractions" });
+    expect(chapter.status).toBe(201);
+    created.nodes.push(chapter.body.chapter.id);
+    const chapterId = chapter.body.chapter.id;
+
+    const first = await agent
+      .post(`/api/curriculum/chapters/${chapterId}/topics`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Proper Fractions" });
+    expect(first.status).toBe(201);
+    created.nodes.push(first.body.topic.id);
+
+    const duplicateCreate = await agent
+      .post(`/api/curriculum/chapters/${chapterId}/topics`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "proper fractions" });
+    expect(duplicateCreate.status).toBe(409);
+    expect(duplicateCreate.body.error.code).toBe("DUPLICATE_TOPIC");
+
+    const second = await agent
+      .post(`/api/curriculum/chapters/${chapterId}/topics`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Improper Fractions" });
+    expect(second.status).toBe(201);
+    created.nodes.push(second.body.topic.id);
+
+    const duplicateUpdate = await agent
+      .patch(`/api/curriculum/topics/${second.body.topic.id}`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Proper Fractions" });
+    expect(duplicateUpdate.status).toBe(409);
+    expect(duplicateUpdate.body.error.code).toBe("DUPLICATE_TOPIC");
+
+    const noOpUpdate = await agent
+      .patch(`/api/curriculum/topics/${second.body.topic.id}`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Improper Fractions" });
+    expect(noOpUpdate.status).toBe(200);
+  });
+
   it("rejects invalid chapter/topic input", async () => {
     const f = await fixture();
     const agent = request(app);
@@ -395,6 +482,76 @@ describe("Phase 022 chapter/topic and learning-resource APIs", () => {
       });
     expect(crossOrgLink.status).toBe(400);
     expect(crossOrgLink.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects duplicate learning resource titles within the same topic (case-insensitive)", async () => {
+    const f = await fixture();
+    const agent = request(app);
+
+    const chapter = await agent
+      .post(`/api/curriculum/structures/${f.structureId}/chapters`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Chapter: Fractions" });
+    const chapterId = chapter.body.chapter.id;
+    created.nodes.push(chapterId);
+
+    const topic = await agent
+      .post(`/api/curriculum/chapters/${chapterId}/topics`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Proper Fractions" });
+    const topicId = topic.body.topic.id;
+    created.nodes.push(topicId);
+
+    const first = await agent
+      .post(`/api/organizations/${f.organizationId}/learning-resources`)
+      .set(auth(f.tokens.admin))
+      .send({ curriculum_node_id: topicId, resource_type: "WORKSHEET", title: "Proper Fractions Worksheet", file_url: "https://cdn.example.com/pf.pdf" });
+    expect(first.status).toBe(201);
+    created.learningResources.push(first.body.learningResource.id);
+
+    const duplicateCreate = await agent
+      .post(`/api/organizations/${f.organizationId}/learning-resources`)
+      .set(auth(f.tokens.admin))
+      .send({ curriculum_node_id: topicId, resource_type: "WORKSHEET", title: "proper fractions worksheet", file_url: "https://cdn.example.com/pf2.pdf" });
+    expect(duplicateCreate.status).toBe(409);
+    expect(duplicateCreate.body.error.code).toBe("DUPLICATE_LEARNING_RESOURCE");
+
+    // Same title under a different topic is allowed.
+    const otherChapter = await agent
+      .post(`/api/curriculum/structures/${f.structureId}/chapters`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Chapter: Decimals" });
+    const otherChapterId = otherChapter.body.chapter.id;
+    created.nodes.push(otherChapterId);
+
+    const otherTopic = await agent
+      .post(`/api/curriculum/chapters/${otherChapterId}/topics`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Decimal Notation" });
+    const otherTopicId = otherTopic.body.topic.id;
+    created.nodes.push(otherTopicId);
+
+    const otherResource = await agent
+      .post(`/api/organizations/${f.organizationId}/learning-resources`)
+      .set(auth(f.tokens.admin))
+      .send({ curriculum_node_id: otherTopicId, resource_type: "WORKSHEET", title: "Proper Fractions Worksheet", file_url: "https://cdn.example.com/pf3.pdf" });
+    expect(otherResource.status).toBe(201);
+    created.learningResources.push(otherResource.body.learningResource.id);
+
+    // Renaming a resource to a duplicate title within the same topic is rejected.
+    const third = await agent
+      .post(`/api/organizations/${f.organizationId}/learning-resources`)
+      .set(auth(f.tokens.admin))
+      .send({ curriculum_node_id: topicId, resource_type: "WORKSHEET", title: "Improper Fractions Worksheet", file_url: "https://cdn.example.com/if.pdf" });
+    expect(third.status).toBe(201);
+    created.learningResources.push(third.body.learningResource.id);
+
+    const duplicateUpdate = await agent
+      .patch(`/api/learning-resources/${third.body.learningResource.id}`)
+      .set(auth(f.tokens.admin))
+      .send({ title: "Proper Fractions Worksheet" });
+    expect(duplicateUpdate.status).toBe(409);
+    expect(duplicateUpdate.body.error.code).toBe("DUPLICATE_LEARNING_RESOURCE");
   });
 
   it("validates learning resource input", async () => {

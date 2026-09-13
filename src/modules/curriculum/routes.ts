@@ -33,6 +33,14 @@ function getErrorResponse(error: unknown) {
       return { status: 409, payload: { error: { code: "DUPLICATE_SYLLABUS_VERSION", message: maybeMessage } } };
     }
 
+    if (maybeCode === "DUPLICATE_CHAPTER") {
+      return { status: 409, payload: { error: { code: "DUPLICATE_CHAPTER", message: maybeMessage } } };
+    }
+
+    if (maybeCode === "DUPLICATE_TOPIC") {
+      return { status: 409, payload: { error: { code: "DUPLICATE_TOPIC", message: maybeMessage } } };
+    }
+
     if (maybeCode === "NOT_FOUND") {
       return { status: 404, payload: { error: { code: "NOT_FOUND", message: maybeMessage } } };
     }

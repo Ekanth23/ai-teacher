@@ -39,7 +39,7 @@ export const getPortionStructureContext = (structureId: string) => pool.query(
    LEFT JOIN classes c ON c.id = s.class_id
    WHERE cs.id=$1`, [structureId]);
 export const getNodeStructure = (nodeId: string) => pool.query("SELECT id, curriculum_structure_id FROM curriculum_nodes WHERE id=$1", [nodeId]);
-export const getClassSubject = (organizationId: string, classId: string, subjectId: string) => pool.query("SELECT id FROM class_subjects WHERE organization_id=$1 AND class_id=$2 AND subject_id=$3", [organizationId, classId, subjectId]);
+export const getClassSubject = (organizationId: string, classId: string, subjectId: string) => pool.query("SELECT id FROM class_subjects WHERE organization_id=$1 AND class_id=$2 AND subject_id=$3 AND status='ACTIVE'", [organizationId, classId, subjectId]);
 export const getClassOrganization = (classId: string, organizationId: string) => pool.query("SELECT id FROM classes WHERE id=$1 AND organization_id=$2", [classId, organizationId]);
 export const getAcademicYear = (id: string) => pool.query("SELECT id FROM academic_years WHERE id=$1", [id]);
 export const getCalendarForEvent = (id: string, organizationId: string) => pool.query("SELECT * FROM academic_calendars WHERE id=$1 AND (scope='REFERENCE' OR organization_id=$2)", [id, organizationId]);
