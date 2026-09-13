@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-neutral-50 font-sans text-neutral-800 antialiased;
+  }
+
+  /* Consistent visible keyboard focus for all interactive elements. */
+  :where(a, button, input, select, textarea, summary):focus-visible {
+    @apply outline-none;
+  }
+}
+
+@layer components {
+  /* Typography hierarchy */
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight text-neutral-900 sm:text-3xl;
+  }
+
+  .section-title {
+    @apply text-xl font-semibold text-neutral-900;
+  }
+
+  .card-title {
+    @apply text-base font-semibold text-neutral-900;
+  }
+
+  .body {
+    @apply text-sm leading-relaxed text-neutral-700;
+  }
+
+  .secondary {
+    @apply text-sm text-neutral-500;
+  }
+
+  .caption {
+    @apply text-xs text-neutral-400;
+  }
+}
