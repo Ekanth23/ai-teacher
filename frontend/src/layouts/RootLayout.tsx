@@ -3,6 +3,7 @@ import { primaryNav } from "../app/navigation";
 import { useAuth } from "../auth/auth-context";
 import { BookIcon, LogOutIcon } from "../components/icons";
 import { Avatar } from "../components/ui/Avatar";
+import { Button } from "../components/ui/Button";
 import { IconButton } from "../components/ui/IconButton";
 import { cn } from "../lib/cn";
 
@@ -69,18 +70,24 @@ export function RootLayout() {
           </ul>
         </nav>
 
-        <div className="border-t border-neutral-200 p-3">
-          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
+        <div className="space-y-3 border-t border-neutral-200 p-3">
+          <div className="flex items-center gap-3 px-2">
             <Avatar name={displayName} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-neutral-800">
                 {displayName}
               </p>
             </div>
-            <IconButton aria-label="Log out" onClick={handleLogout}>
-              <LogOutIcon className="h-5 w-5" />
-            </IconButton>
           </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full"
+            onClick={handleLogout}
+          >
+            <LogOutIcon className="h-4 w-4" />
+            Log out
+          </Button>
         </div>
       </aside>
 

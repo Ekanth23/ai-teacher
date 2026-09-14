@@ -43,13 +43,17 @@ export function getStoredUser(): AuthUser | null {
   return read<AuthUser>(KEYS.user);
 }
 
+export function storeTokens(accessToken: string, refreshToken: string): void {
+  write(KEYS.accessToken, accessToken);
+  write(KEYS.refreshToken, refreshToken);
+}
+
 export function storeSession(
   accessToken: string,
   refreshToken: string,
   user: AuthUser,
 ): void {
-  write(KEYS.accessToken, accessToken);
-  write(KEYS.refreshToken, refreshToken);
+  storeTokens(accessToken, refreshToken);
   write(KEYS.user, user);
 }
 

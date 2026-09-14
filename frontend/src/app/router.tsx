@@ -9,6 +9,8 @@ import NotFoundPage from "../pages/NotFoundPage";
 import PracticePage from "../pages/PracticePage";
 import ProfilePage from "../pages/ProfilePage";
 import ResultsPage from "../pages/ResultsPage";
+import SubjectContextPage from "../pages/SubjectContextPage";
+import SubjectListPage from "../pages/SubjectListPage";
 
 /**
  * Application route table. Placeholder routes only — feature screens are
@@ -23,6 +25,11 @@ export function AppRoutes() {
         <Route element={<RootLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/learning" element={<LearningPage />} />
+          <Route path="/learning/:classId" element={<SubjectListPage />} />
+          <Route
+            path="/learning/:classId/subjects/:subjectId"
+            element={<SubjectContextPage />}
+          />
           <Route path="/practice" element={<PracticePage />} />
           <Route path="/results" element={<ResultsPage />} />
           <Route path="/ai-teacher" element={<AiTeacherPage />} />

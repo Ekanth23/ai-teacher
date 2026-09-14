@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { primaryNav } from "../app/navigation";
@@ -30,6 +30,7 @@ function renderShell(route = "/dashboard") {
             <Route path="/ai-teacher" element={<div>AI Teacher content</div>} />
             <Route path="/profile" element={<div>Profile content</div>} />
           </Route>
+          <Route path="/login" element={<div>Login screen</div>} />
         </Routes>
       </MemoryRouter>
     </AuthProvider>,
@@ -78,7 +79,16 @@ describe("application shell", () => {
     ).toHaveLength(2);
   });
 
-  it("signs out and clears the persisted session", async () => {
+  it("renders a visible Log out control in the desktop sidebar", () => {
+    seedAuthenticatedSession();
+    renderShell("/dashboard");
+
+    const sidebar = screen.getByRole("complementary");
+    const logoutButton = within(sidebar).getByRole("button", { name: "Log out" });
+    expect(logoutButton).toHaveTextContent("Log out");
+  });
+
+  it("signs out, clears the session, and navigates to /login from the desktop sidebar", async () => {
     const user = userEvent.setup();
     mockedLogout.mockResolvedValue({
       success: true,
@@ -87,12 +97,24 @@ describe("application shell", () => {
     seedAuthenticatedSession();
     renderShell("/dashboard");
 
-    const logoutButtons = screen.getAllByRole("button", { name: "Log out" });
-    await user.click(logoutButtons[0]);
+    const sidebar = screen.getByRole("complementary");
+    await user.click(within(sidebar).getByRole("button", { name: "Log out" }));
 
     await waitFor(() => {
       expect(mockedLogout).toHaveBeenCalled();
       expect(localStorage.getItem("ai-teacher:accessToken")).toBeNull();
     });
+
+    expect(await screen.findByText("Login screen")).toBeInTheDocument();
+  });
+
+  it("keeps an accessible Log out control in the mobile header", () => {
+    seedAuthenticatedSession();
+    renderShell("/dashboard");
+
+    const header = screen.getByRole("banner");
+    expect(
+      within(header).getByRole("button", { name: "Log out" }),
+    ).toBeInTheDocument();
   });
 });

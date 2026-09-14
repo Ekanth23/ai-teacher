@@ -4,6 +4,7 @@ import { useAuth } from "../auth/auth-context";
 import { LoginForm, type LoginFormValues } from "../components/auth/LoginForm";
 import { BookIcon } from "../components/icons";
 import { Card } from "../components/ui/Card";
+import { Spinner } from "../components/ui/Spinner";
 import { ApiError } from "../services/api/errors";
 
 interface LoginLocationState {
@@ -11,7 +12,7 @@ interface LoginLocationState {
 }
 
 export default function LoginPage() {
-  const { isAuthenticated, signIn } = useAuth();
+  const { status, isAuthenticated, signIn } = useAuth();
   const location = useLocation();
 
   const [loading, setLoading] = useState(false);
@@ -39,6 +40,14 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  if (status === "checking") {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Spinner label="Checking session…" />
+      </div>
+    );
+  }
 
   if (isAuthenticated) {
     return <Navigate to={destination} replace />;

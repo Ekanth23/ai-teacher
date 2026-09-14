@@ -38,6 +38,15 @@ async function seedAuthenticatedSession(page: Page) {
     );
     window.localStorage.setItem("ai-teacher:user", JSON.stringify(user));
   }, sessionUser);
+
+  // The new auth bootstrap validates the stored token via GET /api/auth/me.
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ user: sessionUser, organizations: [] }),
+    }),
+  );
 }
 
 async function mockDashboard(page: Page, body: unknown) {
