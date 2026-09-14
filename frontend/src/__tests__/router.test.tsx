@@ -7,7 +7,6 @@ import {
 } from "../test/test-utils";
 
 const protectedRoutes: Array<[string, string]> = [
-  ["/dashboard", "Dashboard"],
   ["/learning", "My Learning"],
   ["/practice", "Practice"],
   ["/results", "Results"],

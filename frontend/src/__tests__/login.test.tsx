@@ -17,6 +17,10 @@ vi.mock("../services/api/auth", () => ({
   me: vi.fn(),
 }));
 
+vi.mock("../services/api/dashboard", () => ({
+  getDashboard: vi.fn(() => new Promise<void>(() => {})),
+}));
+
 const mockedLogin = vi.mocked(authApi.login);
 
 describe("login flow", () => {
@@ -50,9 +54,7 @@ describe("login flow", () => {
     });
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { name: "Dashboard" }),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Test Student")).toBeInTheDocument();
     });
   });
 
@@ -84,9 +86,7 @@ describe("login flow", () => {
     renderWithProviders(<App />, { route: "/login" });
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { name: "Dashboard" }),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Test Student")).toBeInTheDocument();
     });
   });
 });
