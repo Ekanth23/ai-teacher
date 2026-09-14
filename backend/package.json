@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:seed:dev": "tsx scripts/seed-dev-student.ts"
   },
   "keywords": [],
   "type": "module",

@@ -51,15 +51,45 @@ export function isValidUuid(value: string | null | undefined) {
   return typeof value === "string" && UUID_REGEX.test(value.trim());
 }
 
+export type OrganizationResolutionOptions = {
+  /**
+   * When `true` and no explicit organization context was supplied (no explicit
+   * argument, `X-Organization-Id` header, or route parameter), resolve the
+   * authenticated user's single ACTIVE organization membership automatically.
+   *
+   * Fails closed with ORGANIZATION_REQUIRED for zero or multiple active
+   * organizations. This is request-time resolution only — it does not persist or
+   * otherwise imply a "default" organization for the user.
+   */
+  autoResolveSingle?: boolean;
+};
+
 export async function resolveOrganizationContext(
   req: Request,
   user: AuthenticatedUser,
-  explicitOrganizationId?: string | null
+  explicitOrganizationId?: string | null,
+  options?: OrganizationResolutionOptions
 ): Promise<OrganizationContext> {
-  const requestedOrganizationId =
+  let requestedOrganizationId =
     explicitOrganizationId ??
     (typeof req.headers["x-organization-id"] === "string" ? req.headers["x-organization-id"] : null) ??
     (typeof req.params?.id === "string" ? req.params.id : null);
+
+  if ((!requestedOrganizationId || !requestedOrganizationId.trim()) && options?.autoResolveSingle) {
+    const activeMemberships = await pool.query(
+      `SELECT om.organization_id
+       FROM organization_members om
+       JOIN organizations o ON o.id = om.organization_id
+       WHERE om.user_id = $1
+         AND om.status = 'ACTIVE'
+         AND o.status = 'ACTIVE'`,
+      [user.id]
+    );
+
+    if (activeMemberships.rows.length === 1) {
+      requestedOrganizationId = activeMemberships.rows[0].organization_id;
+    }
+  }
 
   if (!requestedOrganizationId || !requestedOrganizationId.trim()) {
     throw new AuthorizationError("ORGANIZATION_REQUIRED", "Organization context is required.");

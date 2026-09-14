@@ -20,7 +20,7 @@ const RESOURCE_LIMIT = 10;
 // Establishes the authenticated student and their organization context.
 // Identity comes exclusively from the authenticated request context.
 async function requireStudent(req: Request, user: AuthenticatedUser) {
-  const context = await resolveOrganizationContext(req, user);
+  const context = await resolveOrganizationContext(req, user, null, { autoResolveSingle: true });
   if (context.role.name !== "STUDENT") {
     throw new AuthorizationError("ROLE_REQUIRED", "You do not have permission to access the student dashboard.");
   }
