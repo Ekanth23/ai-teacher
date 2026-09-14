@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Breadcrumb } from "../components/Breadcrumb";
 import { Container } from "../components/Container";
 import { EmptyState } from "../components/EmptyState";
@@ -9,12 +9,20 @@ import { Badge } from "../components/ui/Badge";
 import { Card, CardContent } from "../components/ui/Card";
 import { Skeleton, SkeletonCard } from "../components/ui/Skeleton";
 import { ApiError } from "../services/api/errors";
-import { getClasses, getClassSubjects } from "../services/api/learning";
-import type { StudentClassSummary, SubjectSummary } from "../types/learning";
+import { getDashboard } from "../services/api/dashboard";
+import { getClasses, getClassSubjects, getStructureChapters } from "../services/api/learning";
+import type { Chapter, StudentClassSummary, SubjectSummary } from "../types/learning";
 
 type SubjectContextState =
   | { status: "loading" }
-  | { status: "success"; classContext: StudentClassSummary; subject: SubjectSummary }
+  | {
+      status: "success";
+      classContext: StudentClassSummary;
+      subject: SubjectSummary;
+      chapters: Chapter[];
+    }
+  | { status: "no-structure"; classContext: StudentClassSummary; subject: SubjectSummary }
+  | { status: "ambiguous-structure"; classContext: StudentClassSummary; subject: SubjectSummary }
   | { status: "notfound"; title: string; description: string }
   | { status: "error"; message: string };
 
@@ -53,7 +61,26 @@ export default function SubjectContextPage() {
         });
         return;
       }
-      setState({ status: "success", classContext, subject });
+      const dashboard = await getDashboard();
+      const structures = dashboard.curriculum_structures.filter(
+        (structure) =>
+          structure.class_id === classId && structure.subject_id === subjectId,
+      );
+      if (structures.length === 0) {
+        setState({ status: "no-structure", classContext, subject });
+        return;
+      }
+      if (structures.length > 1) {
+        setState({ status: "ambiguous-structure", classContext, subject });
+        return;
+      }
+      const chapterData = await getStructureChapters(structures[0].id);
+      setState({
+        status: "success",
+        classContext,
+        subject,
+        chapters: chapterData.chapters,
+      });
     } catch (error) {
       setState({
         status: "error",
@@ -124,13 +151,48 @@ export default function SubjectContextPage() {
         </Card>
         <section aria-labelledby="curriculum-heading">
           <h2 id="curriculum-heading" className="section-title">
-            Curriculum
+            Chapters
           </h2>
           <div className="mt-3">
-            <EmptyState
-              title="Chapters will appear here"
-              description="Curriculum content for this subject is coming in a future update."
-            />
+            {state.status === "no-structure" ? (
+              <EmptyState
+                title="No chapters available"
+                description="There isn't a chapter structure available for this subject."
+              />
+            ) : state.status === "ambiguous-structure" ? (
+              <ErrorState
+                title="Chapters unavailable"
+                description="More than one chapter structure is available for this subject."
+              />
+            ) : state.chapters.length === 0 ? (
+              <EmptyState
+                title="No chapters yet"
+                description="Chapters for this subject will appear here once they're available."
+              />
+            ) : (
+              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {state.chapters.map((chapter) => (
+                  <li key={chapter.id}>
+                    <Link
+                      to={`/learning/${classContext.id}/subjects/${subject.id}/chapters/${chapter.id}`}
+                      className="block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                    >
+                      <Card className="h-full transition-colors hover:border-primary-300">
+                        <CardContent>
+                          <h3 className="card-title">{chapter.title}</h3>
+                          {chapter.code ? (
+                            <p className="caption mt-1">{chapter.code}</p>
+                          ) : null}
+                          {chapter.description ? (
+                            <p className="secondary mt-2">{chapter.description}</p>
+                          ) : null}
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </section>
       </div>

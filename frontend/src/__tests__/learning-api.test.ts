@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { request } from "../services/api/client";
-import { getClasses, getClassSubjects } from "../services/api/learning";
+import { getClasses, getClassSubjects, getStructureChapters } from "../services/api/learning";
 
 vi.mock("../services/api/client", () => ({
   request: vi.fn(),
@@ -29,5 +29,16 @@ describe("learning API", () => {
 
     expect(mockedRequest).toHaveBeenCalledTimes(1);
     expect(mockedRequest).toHaveBeenCalledWith("/api/student/classes/class-123/subjects");
+  });
+
+  it("requests chapters for a curriculum structure", async () => {
+    mockedRequest.mockResolvedValue({ chapters: [], total: 0 });
+
+    await getStructureChapters("structure-123");
+
+    expect(mockedRequest).toHaveBeenCalledTimes(1);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/api/curriculum/structures/structure-123/chapters",
+    );
   });
 });

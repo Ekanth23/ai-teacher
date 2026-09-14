@@ -1,6 +1,7 @@
 import type {
   ClassSubjectsResponse,
   ClassListResponse,
+  StructureChaptersResponse,
 } from "../../types/learning";
 import { request } from "./client";
 
@@ -23,4 +24,16 @@ export function getClasses() {
  */
 export function getClassSubjects(classId: string) {
   return request<ClassSubjectsResponse>(`/api/student/classes/${classId}/subjects`);
+}
+
+/**
+ * GET /api/curriculum/structures/:structureId/chapters
+ *
+ * The structure ID is resolved from the authenticated student's dashboard
+ * using the selected class and subject. The backend authorizes access.
+ */
+export function getStructureChapters(structureId: string) {
+  return request<StructureChaptersResponse>(
+    `/api/curriculum/structures/${structureId}/chapters`,
+  );
 }
