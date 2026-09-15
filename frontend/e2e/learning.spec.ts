@@ -55,6 +55,10 @@ const chaptersFixture = {
   total: 1,
 };
 
+const chapterFixture = {
+  chapter: chaptersFixture.chapters[0],
+};
+
 // Seed the app's real auth persistence (the same localStorage session a
 // successful sign-in writes) and intercept the learning APIs with controlled
 // fixtures. No real backend, account, or credentials are used.
@@ -110,6 +114,13 @@ async function mockLearning(page: Page) {
       body: JSON.stringify(chaptersFixture),
     }),
   );
+  await page.route("**/api/curriculum/chapters/*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(chapterFixture),
+    }),
+  );
 }
 
 test.describe("curriculum learning journey", () => {
@@ -119,7 +130,13 @@ test.describe("curriculum learning journey", () => {
     await seedAuthenticatedSession(page);
     await mockLearning(page);
 
-    await page.goto("/learning");
+    await page.goto("/dashboard");
+
+    await expect(
+      page.getByRole("heading", { name: "Welcome back, Test Student" }),
+    ).toBeVisible();
+    await page.getByRole("link", { name: "My Learning" }).first().click();
+    await expect(page).toHaveURL(/\/learning$/);
 
     await expect(
       page.getByRole("heading", { name: "My Learning" }),
@@ -153,6 +170,24 @@ test.describe("curriculum learning journey", () => {
     await expect(page.getByRole("link", { name: /Number Systems/ })).toHaveAttribute(
       "href",
       "/learning/class-1/subjects/subject-1/chapters/chapter-1",
+    );
+
+    await page.getByRole("link", { name: /Number Systems/ }).click();
+    await expect(page).toHaveURL(
+      /\/learning\/class-1\/subjects\/subject-1\/chapters\/chapter-1$/,
+    );
+    await expect(page.getByRole("heading", { name: "Number Systems" })).toBeVisible();
+    await expect(page.getByText("CH-1", { exact: true })).toBeVisible();
+    await expect(page.getByText("Learn about real numbers.")).toBeVisible();
+
+    const breadcrumb = page.getByRole("navigation", { name: "Breadcrumb" });
+    await expect(breadcrumb).toContainText("My Learning");
+    await expect(breadcrumb).toContainText("Grade 8");
+    await expect(breadcrumb).toContainText("Mathematics");
+    await expect(breadcrumb).toContainText("Number Systems");
+    await expect(breadcrumb.getByText("Number Systems", { exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
     );
   });
 

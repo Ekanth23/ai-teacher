@@ -1,6 +1,7 @@
 import type {
   ClassSubjectsResponse,
   ClassListResponse,
+  ChapterResponse,
   StructureChaptersResponse,
 } from "../../types/learning";
 import { request } from "./client";
@@ -36,4 +37,9 @@ export function getStructureChapters(structureId: string) {
   return request<StructureChaptersResponse>(
     `/api/curriculum/structures/${structureId}/chapters`,
   );
+}
+
+/** GET /api/curriculum/chapters/:chapterId */
+export function getChapter(chapterId: string) {
+  return request<ChapterResponse>(`/api/curriculum/chapters/${chapterId}`);
 }

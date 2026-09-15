@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "../auth/ProtectedRoute";
 import { RootLayout } from "../layouts/RootLayout";
 import AiTeacherPage from "../pages/AiTeacherPage";
+import ChapterDetailPage from "../pages/ChapterDetailPage";
 import DashboardPage from "../pages/DashboardPage";
 import LearningPage from "../pages/LearningPage";
 import LoginPage from "../pages/LoginPage";
@@ -29,6 +30,10 @@ export function AppRoutes() {
           <Route
             path="/learning/:classId/subjects/:subjectId"
             element={<SubjectContextPage />}
+          />
+          <Route
+            path="/learning/:classId/subjects/:subjectId/chapters/:chapterId"
+            element={<ChapterDetailPage />}
           />
           <Route path="/practice" element={<PracticePage />} />
           <Route path="/results" element={<ResultsPage />} />

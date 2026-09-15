@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "test": "vitest run",
-    "db:seed:dev": "tsx scripts/seed-dev-student.ts"
+    "db:seed:dev": "tsx scripts/seed-dev-student.ts",
+    "db:seed:curriculum:tn-std8-maths": "tsx scripts/seed-curriculum-tn-std8-maths.ts"
   },
   "keywords": [],
   "type": "module",

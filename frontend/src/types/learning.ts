@@ -47,3 +47,8 @@ export interface StructureChaptersResponse {
   chapters: Chapter[];
   total: number;
 }
+
+/** GET /api/curriculum/chapters/:chapterId */
+export interface ChapterResponse {
+  chapter: Chapter;
+}

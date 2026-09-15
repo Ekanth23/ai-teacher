@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { request } from "../services/api/client";
-import { getClasses, getClassSubjects, getStructureChapters } from "../services/api/learning";
+import {
+  getChapter,
+  getClasses,
+  getClassSubjects,
+  getStructureChapters,
+} from "../services/api/learning";
 
 vi.mock("../services/api/client", () => ({
   request: vi.fn(),
@@ -40,5 +45,14 @@ describe("learning API", () => {
     expect(mockedRequest).toHaveBeenCalledWith(
       "/api/curriculum/structures/structure-123/chapters",
     );
+  });
+
+  it("requests a chapter by ID", async () => {
+    mockedRequest.mockResolvedValue({ chapter: {} });
+
+    await getChapter("chapter-123");
+
+    expect(mockedRequest).toHaveBeenCalledTimes(1);
+    expect(mockedRequest).toHaveBeenCalledWith("/api/curriculum/chapters/chapter-123");
   });
 });
