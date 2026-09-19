@@ -1,0 +1,1462 @@
+BACKEND EPIC 10 — PO DECISION SHEET
+Student Progress, Mastery & Learning Profile
+For Reference — Agreed Product Decisions
+
+Status: Conceptual PO decisions agreed.
+Important: The frozen Master Backlog Draft 2.0 is NOT modified by this document.
+Remaining numeric thresholds/formulas must be explicitly decided before implementation; OpenCode must not invent them.
+
+
+============================================================
+DECISION #1 — PROGRESS VS PERFORMANCE
+============================================================
+
+Agreed: Progress and Performance are separate concepts.
+
+Progress measures the learner's learning/completion coverage within a
+subject, chapter, or topic.
+
+Performance measures how well the learner performed in completed
+practice or formal assessment activities.
+
+Progress must NOT simply be calculated from the student's score.
+Performance must NOT be presented as progress.
+
+Example:
+A student may have completed 70% of available learning coverage while
+their practice performance is 85%.
+
+Therefore:
+- Progress = 70%
+- Practice Performance = 85%
+
+These are different metrics and should remain separate.
+
+
+============================================================
+DECISION #2 — WEAK TOPIC
+============================================================
+
+Agreed: Option B — Threshold + Minimum Evidence.
+
+A topic is classified as Weak only when BOTH conditions are satisfied:
+
+1. The student's performance for the topic is below the defined
+   performance threshold.
+2. The student has sufficient learning evidence based on a minimum
+   amount of submitted activity.
+
+Example:
+If a future approved rule is:
+- Weak threshold = below 60%
+- Minimum evidence = 5 answered questions
+
+Then:
+- 3 questions, 40% performance → Not yet classified as Weak
+- 5 questions, 40% performance → Weak
+
+IMPORTANT:
+The 60% and 5-question values above are examples only.
+They are NOT yet approved PO parameters.
+
+
+============================================================
+DECISION #3 — STRONG TOPIC
+============================================================
+
+Agreed: Option B — Threshold + Minimum Evidence.
+
+A topic is classified as Strong only when BOTH conditions are satisfied:
+
+1. The student's performance for the topic is >= 90%.
+2. The student has reached the defined minimum evidence requirement.
+
+Example:
+If minimum evidence is eventually defined as 5 answered questions:
+- 3 questions, 100% → Not yet classified as Strong
+- 5 questions, 90% → Strong
+- 5 questions, 95% → Strong
+
+The >=90% threshold IS approved.
+The minimum evidence number is NOT yet approved.
+
+
+============================================================
+DECISION #4 — UNFINISHED LEARNING
+============================================================
+
+Agreed: Option C — Insufficient completed learning coverage.
+
+A topic is classified as Unfinished Learning when the student has
+not completed the expected available learning/practice coverage for
+that topic.
+
+This is a coverage/completion concept, NOT a performance concept.
+
+Example:
+A topic has 3 available learning/practice activities:
+- Student completes 3/3 → Completed coverage
+- Student completes 1/3 → Unfinished Learning
+- Student completes 0/3 → Unfinished Learning
+
+The exact definition of "expected available learning/practice
+coverage" must still be explicitly defined before US-104 implementation.
+
+
+============================================================
+DECISION #5 — REPEATED MISTAKES
+============================================================
+
+Agreed: Option C — Repeated conceptual error.
+
+A repeated mistake means the student repeatedly makes the same type
+of conceptual error, even when the exact question differs.
+
+Example:
+- Question 1: incorrect because of misunderstanding a fraction concept
+- Question 2: different question, same conceptual misunderstanding
+- Question 3: another question showing the same conceptual error
+
+→ Repeated conceptual mistake.
+
+IMPORTANT IMPLEMENTATION RULE:
+Current Epic 8 answer history provides question-level answer history,
+but that does not automatically provide reliable conceptual-error
+classification.
+
+OpenCode must NOT invent an algorithm that claims to identify
+conceptual mistakes from raw wrong answers alone.
+
+
+============================================================
+DECISION #6 — ASSESSMENT PERFORMANCE
+============================================================
+
+Agreed: Option A — Practice and Formal Assessment remain completely
+separate metrics.
+
+Epic 10 must NOT combine, average, or weight:
+- Epic 8 practice results
+- Epic 9 formal assessment results
+
+Example:
+Practice Performance = 85%
+Formal Assessment Performance = 72%
+
+The profile may show both independently.
+
+Source ownership:
+- Practice performance → Epic 8
+- Formal assessment performance → Epic 9
+- Epic 10 consumes/derives relevant learning-profile information
+  without changing the meaning of those source results.
+
+
+============================================================
+DECISION #7 — HOMEWORK PERFORMANCE
+============================================================
+
+Agreed: Option B — Completion + Timeliness.
+
+Homework performance is evaluated using completion and timeliness,
+not a numeric academic score.
+
+Example:
+- Submitted on time → Completed / On-time
+- Submitted after due date → Completed / Late
+- Not submitted, due date not passed → Incomplete / Pending
+- Not submitted, due date passed → Overdue
+
+IMPORTANT:
+Epic 10 must NOT invent a homework percentage or academic score from
+these signals.
+
+
+============================================================
+DECISION #8 — STUDENT LEARNING PROFILE
+============================================================
+
+Agreed: Option C + User-Friendly Presentation.
+
+The Student Learning Profile contains all defined outputs from
+US-097 through US-105, presented in a clear, student-friendly format.
+
+The profile is an aggregated view of existing Epic 10 signals.
+It does NOT create a separate or additional mastery score unless
+explicitly defined by the PO.
+
+Profile contents:
+1. Subject Progress
+2. Chapter Progress
+3. Topic Progress
+4. Homework Performance
+5. Practice Performance
+6. Formal Assessment Performance
+7. Strong Topics
+8. Weak Topics
+9. Unfinished Learning
+10. Repeated Conceptual Mistakes
+
+Example:
+YOUR LEARNING PROFILE
+
+Mathematics
+- Progress: 72%
+- Practice Performance: 78%
+- Formal Assessment: 70%
+
+Strong Topics
+- Algebra
+
+Topics Needing Attention
+- Fractions
+
+Unfinished Learning
+- Geometry
+
+Homework
+- 8 completed
+- 6 on time
+- 2 late
+- 1 overdue
+
+Example values are illustrative only.
+
+
+============================================================
+DECISION #9 — MASTERY
+============================================================
+
+Agreed: Option C — Mastered / Not Mastered + Evidence.
+
+Mastery is represented as a Mastered / Not Mastered state rather than
+a separate numeric mastery score.
+
+A student/topic can be considered Mastered only when:
+1. Performance reaches the approved mastery threshold.
+2. Minimum evidence requirements are satisfied.
+
+Otherwise:
+- Not Mastered
+
+Example:
+If a future PO rule defines:
+- Mastery threshold = 90%
+- Minimum evidence = 5 answered questions
+
+Then:
+- 3 questions at 100% → Not yet Mastered
+- 5 questions at 90% → Mastered
+- 5 questions at 95% → Mastered
+
+The example values are NOT yet approved mastery parameters.
+
+No complex mastery engine should be introduced unless explicitly
+defined by the PO.
+
+
+============================================================
+DECISION #10 — ACCESS / ROLES
+============================================================
+
+Agreed: Option C — Student + Authorized Staff.
+
+Epic 10 learning/progress information is available to the student and
+authorized staff, with strict organization/tenant isolation.
+
+Access:
+- Student → own progress, performance, mastery and learning profile
+- Teacher → authorized students within permitted organization/class scope
+- School Admin → students within their organization
+- Coaching Admin → students within their organization
+- Parent → handled by Epic 15, not Epic 10
+
+Security requirements:
+- Enforce organization/tenant isolation.
+- Prevent cross-tenant access.
+- Respect existing staff authorization boundaries.
+- Prevent a student from accessing another student's data.
+- Reuse existing authorization patterns rather than inventing a new
+  permission model.
+
+
+============================================================
+CURRENT AGREED EPIC 10 DECISIONS
+============================================================
+
+1. Progress vs Performance
+   → Separate concepts.
+
+2. Weak Topic
+   → Threshold + minimum evidence.
+
+3. Strong Topic
+   → Performance >= 90% + minimum evidence of 10 answered question
+     responses.
+   → Both conditions are required.
+
+4. Unfinished Learning
+   → Incomplete expected available learning/practice coverage.
+
+5. Repeated Mistakes
+   → Repeated conceptual error across different questions.
+
+6. Assessment Performance
+   → Practice and formal assessment remain separate.
+
+7. Homework Performance
+   → Completion + timeliness.
+
+8. Student Learning Profile
+   → All US-097–105 outputs + user-friendly presentation.
+
+9. Mastery
+   → Mastered / Not Mastered + performance/evidence requirements.
+
+10. Access / Roles
+    → Student + authorized staff; parent access belongs to Epic 15.
+
+11. Progress Formula
+    → Completed Published Practices / Available Published Practices × 100.
+    → Completion means at least one SUBMITTED attempt.
+    → Multiple submitted attempts count once.
+    → DRAFT and ARCHIVED practices are excluded.
+    → Zero available practices returns no progress data, not 0%.
+
+12. Assessment Performance
+    → Practice and formal assessment results remain separate.
+    → Preserve individual submitted results.
+    → No combined, weighted, overall, latest, best, or average
+      aggregation unless separately approved.
+
+13. Weak Topic Threshold and Evidence
+    → Performance below 60%.
+    → Minimum evidence = 10 answered question responses.
+    → Both conditions are required.
+
+14. Topic Performance Formula
+    → Individual submitted-attempt performance =
+      Correct Answered Questions / Total Answered Questions × 100.
+    → Only answered questions are included.
+    → Unanswered questions do not count.
+
+15. Multiple Submitted Attempts
+    → Topic Performance % = average of the performance percentages
+      of all submitted attempts for practices belonging to that topic.
+    → Do not combine raw answer rows across attempts.
+    → Do not select latest, best, or otherwise filter attempts.
+    → No weighting unless explicitly approved.
+
+16. Minimum Evidence Counting
+    → Minimum evidence is the total number of answered question
+      responses across all submitted attempts for the topic.
+    → Each answered response counts separately, including repeated
+      answers to the same question in different attempts.
+    → Unanswered questions do not count.
+    → Minimum evidence for Weak Topic = 10 answered question responses.
+
+
+============================================================
+PARAMETERS STILL REQUIRING EXPLICIT PO DEFINITION
+============================================================
+
+These are NOT to be invented by OpenCode:
+
+- Strong-topic performance threshold → Decision #3
+- Strong-topic minimum evidence → Decision #
+- Exact definition of expected available learning/practice coverage
+- Mechanism for identifying conceptual errors
+- Mastery threshold
+- Minimum evidence for Mastery
+- Any other formula or threshold not explicitly approved
+
+The following parameters have now been explicitly decided and MUST
+NOT be treated as undefined:
+
+- Progress/coverage formula → Decision #11
+- Assessment performance representation → Decision #12
+- Weak-topic performance threshold → Decision #13
+- Weak-topic minimum evidence → Decisions #13 and #16
+- Individual topic-performance formula → Decision #14
+- Multiple-attempt aggregation → Decision #15
+- Minimum-evidence counting method → Decision #16
+
+Implementation principle:
+
+AGREED CONCEPT → may be implemented.
+UNDEFINED PARAMETER → identify and stop for PO clarification.
+DO NOT GUESS.
+DO NOT INVENT.
+DO NOT MODIFY THE FROZEN MASTER BACKLOG.
+
+============================================================
+PO DECISION #11 — PROGRESS FORMULA
+============================================================
+
+Decision: OPTION A — PRACTICE COMPLETION COVERAGE
+
+Progress is a learning-coverage metric, NOT a performance metric.
+
+Formula:
+
+Progress % =
+Completed Published Practices
+----------------------------- × 100
+Available Published Practices
+
+
+Definition of "Completed":
+- A practice is considered completed when the student has at least
+  one SUBMITTED attempt for that practice.
+- IN_PROGRESS attempts do NOT count as completed.
+- Multiple submitted attempts for the same practice count only once.
+- The student's score or percentage does NOT affect progress.
+
+Practice availability:
+- Only PUBLISHED practices are included.
+- DRAFT practices are excluded.
+- ARCHIVED practices are excluded.
+
+Level-specific calculation:
+
+1. Topic Progress
+   Completed published practices attached to the topic
+   --------------------------------------------------- × 100
+   Available published practices attached to the topic
+
+2. Chapter Progress
+   Completed published practices belonging to topics within the chapter
+   ------------------------------------------------------------------- × 100
+   Available published practices within the chapter
+
+3. Subject Progress
+   Completed published practices within the subject
+   ----------------------------------------------- × 100
+   Available published practices within the subject
+
+
+Zero-content rule:
+- If there are zero available published practices at the requested
+  level, do NOT return 0%.
+- Return "no progress data" / the system's appropriate empty-state
+  representation instead.
+
+Important boundaries:
+- Progress must NOT be calculated from score or percentage.
+- Progress must NOT use question-level coverage.
+- Progress must NOT count attempts/submissions directly as the numerator.
+- No weighted progress formula.
+- No separate progress table or snapshot is required.
+- Progress is derived from existing Epic 8 practice data.
+
+Purpose:
+US-097 Track Subject Progress
+US-098 Track Chapter Progress
+US-099 Track Topic Progress
+
+These stories consume Epic 8 practice results for derived progress.
+============================================================
+
+============================================================
+PO DECISION #12 — ASSESSMENT PERFORMANCE
+============================================================
+
+Decision: OPTION B — SEPARATE INDIVIDUAL RESULTS
+
+Epic 10 must keep Practice Performance and Formal Assessment
+Performance completely separate.
+
+Epic 10 must NOT combine, average, weight, or create a composite
+performance score from the two sources.
+
+Practice results:
+- Consume existing Epic 8 practice results.
+- Preserve each submitted practice result individually.
+- Do not calculate an overall practice-performance summary unless
+  separately defined by the PO.
+
+Formal assessment results:
+- Consume existing Epic 9 formal assessment results.
+- Preserve each submitted formal assessment result individually.
+- Do not calculate an overall formal-assessment performance summary
+  unless separately defined by the PO.
+
+Representation:
+
+Practice Results:
+- Individual submitted practice results
+
+Formal Assessment Results:
+- Individual submitted formal assessment results
+
+Each result should retain its source/domain meaning.
+
+Source ownership:
+- Practice results → Epic 8
+- Formal assessment results → Epic 9
+- Epic 10 → consumes/derives the information for the learning profile
+  without changing the meaning of the source results.
+
+IMPORTANT:
+- No combined Practice + Formal Assessment score.
+- No weighted average.
+- No overall performance score.
+- No "latest", "best", or "average" aggregation unless explicitly
+  approved by a future PO decision.
+- Do not modify Epic 8 or Epic 9 result semantics.
+- Do not invent a new performance formula.
+
+Purpose:
+US-101 — Track assessment performance.
+
+This decision removes the previous aggregation ambiguity while
+preserving the separation established in PO Decision #6.
+============================================================
+
+============================================================
+PO DECISION #13 — WEAK TOPIC
+============================================================
+
+Decision: OPTION A — PERFORMANCE BELOW 60%
+Minimum Evidence: 10 Answered Question Responses
+
+A topic is classified as Weak only when BOTH conditions are satisfied:
+
+1. Topic performance is below 60%.
+2. The student has at least 10 answered question responses.
+
+Weak threshold:
+- Performance < 60% → qualifies for Weak classification.
+- Performance >= 60% → does not qualify as Weak.
+
+Minimum evidence:
+- Fewer than 10 answered question responses → insufficient evidence.
+- 10 or more answered question responses → sufficient evidence for
+  this rule.
+
+Examples:
+- 40% performance + 5 answered question responses
+  → Not Weak — insufficient evidence.
+
+- 40% performance + 10 answered question responses
+  → Weak.
+
+- 59% performance + 10 answered question responses
+  → Weak.
+
+- 60% performance + 10 answered question responses
+  → Not Weak.
+
+- 80% performance + 20 answered question responses
+  → Not Weak.
+
+Important:
+- Both the performance threshold and minimum evidence requirement
+  must be satisfied.
+- Weak Topic is derived intelligence, not raw score storage.
+- Do not create a separate numeric "weakness score".
+- Do not change Epic 8 result semantics.
+- Do not invent additional thresholds or evidence requirements.
+============================================================
+
+
+============================================================
+PO DECISION #14 — TOPIC PERFORMANCE FORMULA
+============================================================
+
+Decision: OPTION A — CORRECT ANSWERED QUESTIONS / TOTAL ANSWERED QUESTIONS
+
+Topic performance for an individual submitted practice attempt is
+calculated as:
+
+Topic Performance % =
+Correct Answered Questions
+-------------------------- × 100
+Total Answered Questions
+
+Definitions:
+- Only answered questions are included in the numerator and
+  denominator.
+- Correct answered questions are those evaluated as correct using
+  the existing Epic 8 result semantics.
+- Unanswered questions do not count.
+- This formula defines the performance percentage for an individual
+  submitted attempt used by US-102 Weak Topic detection.
+- Do not use score/max_score or another formula for this calculation.
+
+This decision defines the individual submitted-attempt performance
+used before applying the multiple-attempt rule in Decision #15.
+
+Purpose:
+US-102 — Identify Weak Topics.
+
+IMPORTANT:
+Do not invent or change the topic-performance formula.
+============================================================
+
+
+============================================================
+PO DECISION #15 — MULTIPLE SUBMITTED ATTEMPTS
+============================================================
+
+Decision: OPTION E — AVERAGE THE SUBMITTED ATTEMPT PERFORMANCES
+
+When multiple submitted attempts exist for practices belonging to
+the same topic:
+
+Topic Performance % =
+Average of the individual submitted-attempt performance percentages.
+
+Example:
+
+Attempt 1 = 40%
+Attempt 2 = 70%
+Attempt 3 = 80%
+
+Topic Performance =
+(40 + 70 + 80) / 3
+= 63.33%
+
+Rules:
+- Include all submitted attempts in scope for the topic.
+- Each submitted attempt contributes its individual performance
+  percentage once.
+- Do not select only the latest attempt.
+- Do not select only the best attempt.
+- Do not otherwise filter submitted attempts.
+- Do not combine raw answer rows across attempts to calculate the
+  performance percentage.
+- Do not introduce weighting unless explicitly approved.
+
+Decision #14 defines the performance of each individual submitted
+attempt.
+
+Decision #15 defines how those individual submitted-attempt
+performances are aggregated when multiple attempts exist.
+
+Purpose:
+US-102 — Identify Weak Topics.
+
+IMPORTANT:
+Do not invent or change the multiple-attempt aggregation rule.
+============================================================
+
+
+============================================================
+PO DECISION #16 — MINIMUM EVIDENCE COUNTING
+============================================================
+
+Decision: OPTION A — TOTAL ANSWERED QUESTION RESPONSES ACROSS ALL
+SUBMITTED ATTEMPTS
+
+For US-102 minimum evidence:
+
+- Count answered question responses across all submitted attempts
+  for practices belonging to the topic.
+- Each answered response in each submitted attempt counts separately.
+- If the same question is answered again in another submitted
+  attempt, that is another answered question response.
+- Unanswered questions do not count.
+- The minimum evidence requirement is 10 answered question responses.
+
+Example:
+
+Attempt 1:
+- 4 answered questions
+
+Attempt 2:
+- 3 answered questions
+
+Attempt 3:
+- 5 answered questions
+
+Total answered question responses:
+4 + 3 + 5 = 12
+
+→ Minimum evidence requirement is satisfied.
+
+Important:
+- Evidence is counted across submitted attempts.
+- Repeated answers to the same question across different attempts
+  still count as separate answered responses.
+- Do not deduplicate question responses for evidence counting.
+- Do not count unanswered questions.
+- Do not invent a different evidence-counting mechanism.
+
+Combined with Decisions #13, #14 and #15, the final US-102 Weak
+Topic rule is:
+
+A topic is Weak only when BOTH conditions are satisfied:
+
+1. Topic Performance < 60%
+2. Total Answered Question Responses >= 10
+
+Topic Performance is calculated by:
+- Decision #14 → individual submitted-attempt performance
+- Decision #15 → average of submitted-attempt performances
+
+Minimum evidence is calculated by:
+- Decision #16 → total answered question responses across all
+  submitted attempts
+
+Purpose:
+US-102 — Identify Weak Topics.
+
+IMPORTANT:
+Do not invent or change the minimum-evidence counting rule.
+============================================================
+
+============================================================
+PO DECISION #17 — STRONG TOPIC MINIMUM EVIDENCE
+============================================================
+
+Decision: OPTION A — 10 ANSWERED QUESTION RESPONSES
+
+A topic is classified as Strong only when BOTH conditions are
+satisfied:
+
+1. Topic performance is >= 90%.
+2. The student has at least 10 answered question responses across
+   all submitted attempts for practices belonging to that topic.
+
+Performance calculation follows the existing Epic 10 decisions:
+
+- Individual submitted-attempt performance =
+  Correct Answered Questions / Total Answered Questions × 100.
+- Only answered questions are included.
+- Unanswered questions do not count.
+- When multiple submitted attempts exist, topic performance is the
+  average of the individual submitted-attempt performance
+  percentages.
+- Do not select latest, best, or otherwise filter attempts.
+- Do not combine raw answer rows across attempts to calculate
+  topic performance.
+
+Evidence counting follows the established minimum-evidence
+semantics:
+
+- Count answered question responses across all submitted attempts
+  for the topic.
+- Each answered response in each submitted attempt counts separately.
+- Re-answering the same question in another submitted attempt
+  counts as another answered response.
+- Unanswered questions do not count.
+- IN_PROGRESS attempts do not count.
+
+Examples:
+
+- 3 answered responses at 100% → Not Strong (insufficient evidence)
+- 5 answered responses at 100% → Not Strong (insufficient evidence)
+- 9 answered responses at 100% → Not Strong (insufficient evidence)
+- 10 answered responses at 90% → Strong
+- 10 answered responses at 100% → Strong
+- 20 answered responses at 95% → Strong
+- 10 answered responses at 89.99% → Not Strong
+
+Important boundaries:
+
+- The Strong performance threshold is >=90%.
+- The minimum evidence requirement is exactly 10 answered question
+  responses.
+- Strong Topic classification is derived and must not be stored as
+  a separate score or snapshot.
+- Practice performance and formal assessment performance remain
+  separate; formal assessment results must not be combined,
+  averaged, or weighted into Strong Topic classification.
+- This decision does not modify Epic 8 attempt or result semantics.
+- This decision does not modify the frozen Master Backlog.
+
+Purpose:
+
+US-103 — Identify Strong Topics
+============================================================
+
+============================================================
+PO DECISION #18 — UNFINISHED LEARNING DEFINITION
+============================================================
+
+Decision: PUBLISHED PRACTICE COVERAGE AT TOPIC LEVEL
+
+US-104 — Identify Unfinished Learning
+
+A topic's unfinished-learning status is derived from its expected
+learning coverage using PUBLISHED practices only.
+
+1. COVERAGE UNIT
+
+The expected available learning coverage for US-104 is:
+
+- PUBLISHED practices only.
+- Draft practices are excluded.
+- Archived practices are excluded.
+- Formal assessments are excluded.
+- Learning resources are excluded from the coverage calculation.
+
+2. GRANULARITY
+
+US-104 operates at TOPIC level.
+
+For each relevant topic:
+
+    available = number of PUBLISHED practices belonging to the topic.
+
+    completed = number of those PUBLISHED practices for which the
+                student has at least one SUBMITTED practice attempt.
+
+A practice with at least one SUBMITTED attempt is considered
+completed.
+
+3. IN_PROGRESS SEMANTICS
+
+An IN_PROGRESS practice is considered UNFINISHED.
+
+Therefore:
+
+- IN_PROGRESS does not count as completed.
+- A practice with only an IN_PROGRESS attempt remains unfinished.
+- A practice with no attempt remains unfinished.
+- A practice becomes completed only when at least one SUBMITTED
+  attempt exists.
+
+Existing Epic 8 attempt semantics remain unchanged.
+
+4. COMPLETION STATUS
+
+US-104 returns ALL relevant topics, not only unfinished topics.
+
+Each topic must expose its completion state derived from:
+
+    completed
+    available
+
+A topic is:
+
+    COMPLETED
+        when completed = available
+
+    UNFINISHED
+        when completed < available
+
+5. ZERO-AVAILABLE TOPICS
+
+Topics with zero available PUBLISHED practices do not have expected
+learning coverage.
+
+They must not be classified as UNFINISHED solely because:
+
+    completed = 0
+    available = 0
+
+Their completion state must therefore be represented as having no
+available learning coverage rather than as unfinished.
+
+6. MULTIPLE ATTEMPTS
+
+A practice counts as completed once when at least one SUBMITTED
+attempt exists.
+
+Multiple submitted attempts for the same practice do not increase
+the completed count.
+
+IN_PROGRESS attempts do not contribute to completed coverage.
+
+7. EVIDENCE SOURCE
+
+US-104 is a COMPLETION/COVERAGE concept, not a performance concept.
+
+Do NOT use:
+
+- score
+- percentage
+- correctness
+- best attempt
+- latest attempt
+- average performance
+- assessment performance
+
+to determine unfinished learning.
+
+8. API RESPONSE
+
+US-104 returns all relevant topic-level learning coverage with
+completion state.
+
+The response must provide enough information to represent:
+
+- topic identity
+- topic title
+- chapter identity
+- completed practice count
+- available published-practice count
+- derived completion state
+
+Expected conceptual response:
+
+{
+  "topics": [
+    {
+      "id": "<topic-id>",
+      "title": "<topic-title>",
+      "chapter_id": "<chapter-id>",
+      "completed": <number>,
+      "available": <number>,
+      "status": "COMPLETED" | "UNFINISHED"
+    }
+  ]
+}
+
+For topics with zero available PUBLISHED practices, the status must
+represent "no available learning coverage" rather than UNFINISHED.
+
+The exact implementation representation for this zero-coverage state
+must remain consistent with the existing API conventions and must not
+invent additional learning states beyond what is necessary.
+
+9. ACCESS CONTROL
+
+Student access is limited to the authenticated student's own
+learning data.
+
+Staff access remains organization-scoped and may retrieve the
+specified student only within the authorized organization.
+
+10. TENANCY
+
+All coverage and completion calculations remain organization-safe.
+
+Data from another organization must never contribute to a student's
+unfinished-learning result.
+
+11. SCOPE BOUNDARIES
+
+This decision:
+
+- does not modify Epic 8 attempt semantics.
+- does not modify Epic 9 formal assessment semantics.
+- does not introduce stored unfinished-learning records.
+- does not introduce a new database table.
+- does not introduce performance-based classification.
+- does not change the frozen Master Backlog.
+- does not define US-105 repeated-mistake behavior.
+- does not define US-106 learning-profile aggregation beyond the
+  availability of US-104 output.
+
+US-104 remains derived read-only intelligence over existing
+practice, curriculum, and attempt data.
+
+12. PURPOSE
+
+US-104 — Identify Unfinished Learning
+
+The purpose is to identify topic-level learning coverage that the
+student has not yet completed, using PUBLISHED practice availability
+and SUBMITTED practice completion.
+
+============================================================
+END PO DECISION #18
+============================================================
+
+============================================================
+PO DECISION #19 — CONCEPT TAXONOMY
+============================================================
+
+Decision: USE EXISTING knowledge_items(kind = CONCEPT)
+
+For Backend Epic 10 — US-105 Detect Repeated Mistakes, the
+authoritative concept vocabulary is the existing
+`knowledge_items` model using:
+
+    kind = CONCEPT
+
+1. AUTHORITATIVE CONCEPT MODEL
+
+AI Teacher will use the existing `knowledge_items` records whose
+kind is `CONCEPT` as the authoritative learning-concept taxonomy.
+
+A CONCEPT represents a reusable learnable knowledge unit that may
+be relevant to multiple curriculum nodes and, once question
+attribution is defined, multiple practice questions.
+
+This is NOT a new concept table.
+
+2. SINGLE CONCEPT VOCABULARY
+
+US-105 must not introduce a separate concept taxonomy solely for
+repeated-mistake detection.
+
+The existing `knowledge_items(kind = CONCEPT)` vocabulary is the
+authoritative source for concepts used by US-105.
+
+This establishes one shared concept vocabulary that can be reused
+across the learning system.
+
+3. DISTINCTION FROM CURRICULUM STRUCTURE
+
+A curriculum Topic is not automatically a Concept.
+
+The following remain distinct:
+
+    Subject
+        ↓
+    Chapter
+        ↓
+    Topic
+
+and:
+
+    Knowledge Item
+        kind = CONCEPT
+
+A topic may contain or cover multiple concepts.
+
+Therefore:
+
+    Topic ≠ Concept
+
+US-105 must use the explicit CONCEPT identity rather than treating
+the topic identity as the conceptual-error identity.
+
+4. EXISTING KNOWLEDGE ITEM SEMANTICS
+
+The existing `knowledge_items` model remains the source of the
+concept identity and its existing metadata.
+
+US-105 does not redefine the meaning of:
+
+- knowledge_items
+- knowledge_item.kind
+- curriculum_node_knowledge_items
+- existing curriculum knowledge relationships
+
+This decision only establishes that existing
+`knowledge_items(kind = CONCEPT)` are the authoritative concept
+vocabulary for US-105.
+
+5. QUESTION ATTRIBUTION REMAINS SEPARATE
+
+This decision does NOT define how a practice question is associated
+with a CONCEPT.
+
+The Question → Concept attribution mechanism is a separate product
+decision and must be defined in PO Decision #20.
+
+Until that decision is made:
+
+- practice questions must not be assumed to have concept mappings
+- no concept attribution algorithm may be invented
+- no question metadata convention may be introduced
+- no AI/LLM classifier may infer conceptual errors
+- no migration or schema change is authorized by this decision
+
+6. REPEATED-MISTAKE SEMANTICS
+
+This decision does not change the authoritative US-105 definition
+from Decision #5:
+
+    A repeated mistake is the same type of conceptual error across
+    different questions.
+
+Decision #19 only establishes the authoritative concept vocabulary
+that future question attribution will use.
+
+It does NOT define:
+
+- how many mistakes constitute "repeated"
+- whether the questions must be different
+- how occurrences are counted
+- whether a corrected mistake remains repeated
+- attempt/history rules
+- practice vs formal assessment scope
+- minimum evidence
+- output fields
+
+Those decisions remain separate.
+
+7. SCOPE BOUNDARY
+
+This decision:
+
+- does not modify Epic 8
+- does not modify Epic 9
+- does not modify US-097 through US-104
+- does not define US-106
+- does not introduce a new database table
+- does not authorize a migration
+- does not define the Question → Concept relationship
+- does not define repeated-mistake thresholds
+- does not define the US-105 API contract
+- does not change the frozen Master PO
+
+8. PURPOSE
+
+The purpose of Decision #19 is to establish a single,
+authoritative concept vocabulary for US-105:
+
+    knowledge_items(kind = CONCEPT)
+
+This prevents US-105 from creating a parallel concept taxonomy and
+provides the foundation for the subsequent Question → Concept
+attribution decision.
+
+============================================================
+END PO DECISION #19
+============================================================
+
+Decision #20 — Question → Concept Mapping
+
+Decision: Option C — Primary + Secondary Concepts
+
+Each question shall have exactly one primary concept and zero or more secondary concepts.
+
+The primary concept represents the main conceptual target of the question. Secondary concepts represent additional conceptual coverage.
+
+For US-105:
+- The primary concept is used for repeated-mistake detection.
+- Secondary concepts do not contribute to repeated-mistake detection.
+- Question → concept attribution must be explicitly stored/maintained. It must not be inferred from raw question text, answer text, or question metadata.
+
+Example:
+Question Q1
+Primary Concept: Equivalent Fractions
+Secondary Concepts: Simplification
+
+Boundary:
+This decision defines the question-to-concept relationship only. It does not define the repeated-mistake threshold or evidence requirements; those are defined separately.
+
+
+Decision #21 — Definition of Repeated Mistake
+==============================================
+
+Decision: Option D — Three or more incorrect responses
+
+A repeated mistake is detected when a student has at least 3 incorrect responses associated with the same primary concept.
+
+Threshold:
+incorrect responses >= 3
+
+The incorrect responses must use the existing answer/result correctness semantics from the relevant practice and assessment systems.
+
+Boundary:
+No AI classifier, semantic similarity algorithm, or inferred conceptual-error classifier shall be introduced to determine whether an answer represents a conceptual mistake. Detection must use the explicitly defined question → concept mapping.
+
+This decision does not by itself define whether the responses must come from different questions or attempts. That evidence-diversity requirement is defined in Decision #23.
+
+
+Decision #22 — Evidence Sources for Repeated Mistakes
+========================================================
+Decision: Option C — Practice + Formal Assessment
+
+US-105 shall consider submitted incorrect responses from both:
+
+1. Practice attempts from Epic 8.
+2. Formal assessment attempts from Epic 9.
+
+Both sources may contribute evidence toward the same concept.
+
+Example:
+Practice attempt → Concept A → Incorrect
+Practice attempt → Concept A → Incorrect
+Formal assessment → Concept A → Incorrect
+
+These responses may contribute to repeated-mistake evidence for Concept A, subject to the evidence-diversity requirements in Decision #23.
+
+Boundary:
+US-105 is a read-only consumer of Epic 8 and Epic 9 answer/result history. It must not modify the semantics, scoring, submission, or result behavior of those epics.
+
+
+Decision #23 — Evidence Diversity Requirement
+==============================================
+
+Decision: Option D — Three different questions AND at least two attempts
+
+A repeated mistake shall qualify only when all of the following are true:
+
+1. At least 3 incorrect responses.
+2. Responses come from at least 3 different questions.
+3. Responses span at least 2 submitted attempts.
+4. All responses are associated with the same primary concept.
+
+Therefore:
+
+3 incorrect responses
++ 3 different questions
++ 2 or more submitted attempts
+= qualifies as repeated mistake.
+
+Example — qualifies:
+
+Practice Attempt 1
+  Q1 → Concept A → Incorrect
+
+Practice Attempt 2
+  Q2 → Concept A → Incorrect
+
+Formal Assessment Attempt 3
+  Q3 → Concept A → Incorrect
+
+This qualifies because there are 3 incorrect responses, 3 different questions, and evidence across multiple submitted attempts, all associated with the same primary concept.
+
+Example — does not qualify:
+
+Attempt 1
+  Q1 → Concept A → Incorrect
+  Q1 → Concept A → Incorrect
+  Q1 → Concept A → Incorrect
+
+This does not qualify because the evidence does not come from 3 different questions.
+
+Another non-qualifying example:
+
+Attempt 1
+  Q1 → Concept A → Incorrect
+  Q2 → Concept A → Incorrect
+  Q3 → Concept A → Incorrect
+
+This does not qualify because all evidence comes from only one submitted attempt.
+
+Boundary:
+The same response/question occurrence must not be counted multiple times merely to satisfy the threshold.
+
+
+Decision #24 — Primary vs Secondary Concept Attribution
+==========================================================
+Decision: Option C — Primary concept drives detection; secondary concepts are supporting context only
+
+When a question contains:
+
+Primary Concept: Concept A
+Secondary Concepts: Concept B, Concept C
+
+and the student answers the question incorrectly:
+
+- The incorrect response contributes to Concept A.
+- It does not contribute to the repeated-mistake threshold for Concept B.
+- It does not contribute to the repeated-mistake threshold for Concept C.
+
+Secondary concepts may be returned as supporting/contextual information where explicitly required by the output contract, but they do not contribute to the detection threshold.
+
+Example:
+
+Q1
+Primary: Equivalent Fractions
+Secondary: Simplification
+
+Student: Incorrect
+
+Result for US-105:
+Equivalent Fractions → +1 incorrect response
+Simplification → +0 incorrect responses
+
+Boundary:
+Only the primary concept participates in repeated-mistake classification.
+
+
+US-105 — Consolidated Rule
+
+Concept source:
+knowledge_items(kind = CONCEPT)
+
+Question mapping:
+1 primary concept + 0..N secondary concepts
+
+Repeated mistake:
+>= 3 incorrect responses
+
+Evidence diversity:
+>= 3 different questions
+AND
+>= 2 submitted attempts
+
+Evidence sources:
+Practice + Formal Assessment
+
+Attribution:
+Primary concept only
+
+Secondary concepts:
+Supporting context only
+
+US-105 remains derived, read-only intelligence. No separate stored "mistake" record is authorized by these decisions, and Epic 8/Epic 9 semantics must remain unchanged.
+
+
+Decision #25 — Question → Concept Mapping Storage
+=================================================
+Decision: Option A — Single shared question_concepts table
+
+Use one shared question_concepts table for both Practice and Formal Assessment questions.
+
+The table shall distinguish the question domain using:
+question_scope = PRACTICE | FORMAL
+
+The mapping shall support:
+- exactly one primary concept per question
+- zero or more secondary concepts per question
+- reuse of the same knowledge_items(kind=CONCEPT) across questions
+- mappings for both Practice and Formal Assessment questions
+
+Required logical fields:
+- question_scope
+- question_id
+- knowledge_item_id
+- is_primary
+- created_at
+
+Required constraints:
+- unique(question_scope, question_id, knowledge_item_id)
+- at most one primary concept per (question_scope, question_id), enforced by a partial unique constraint/index where is_primary = true
+- knowledge_item_id must reference knowledge_items
+- only knowledge_items with kind = CONCEPT may be linked, enforced by the application/service layer and tests
+
+No existing Epic 8 or Epic 9 question tables shall be modified solely to store concept mappings.
+
+No unsupported question metadata field shall be repurposed for concept attribution.
+
+The shared mapping table is the authoritative question → concept relationship for US-105.
+
+Decision #26 — Question → Concept Mapping Authorship
+=====================================================
+
+Decision: AI-assisted concept assignment with human approval
+
+The system shall support AI-assisted question → concept mapping to reduce the manual effort of assigning concepts to individual questions.
+
+The AI may analyze a question and suggest:
+- exactly one primary concept
+- zero or more secondary concepts
+
+Suggestions shall be selected only from the existing authoritative knowledge_items(kind = CONCEPT) vocabulary.
+
+AI-generated suggestions shall not automatically become authoritative mappings.
+
+An authorized admin/content reviewer shall be able to:
+- accept the suggested mapping
+- modify the suggested mapping
+- reject the suggestion
+- manually assign concepts
+- bulk approve mappings where appropriate
+
+Only approved mappings shall be persisted as authoritative question_concepts relationships and used by US-105.
+
+The AI shall not create new concepts automatically.
+
+US-105 repeated-mistake detection shall remain deterministic and shall use only the approved question_concepts mappings and existing practice/formal assessment answer/result history.
+
+The concept-mapping UI and bulk-review workflow are outside the current US-105 detection implementation unless separately included in the approved backlog.
+
+Decision #27 — US-105 API Output Contract
+=============================================
+Decision: Minimal derived repeated-mistake response
+
+US-105 shall expose the following student endpoint:
+
+GET /api/student/repeated-mistakes
+
+US-105 shall expose the following authorized staff endpoint:
+
+GET /api/organizations/:organizationId/students/:studentId/repeated-mistakes
+
+Student endpoint:
+- Returns repeated mistakes for the authenticated student only.
+- Student identity shall be derived from the authenticated session.
+- Client-provided student identity shall not be trusted.
+
+Staff endpoint:
+- Returns repeated mistakes for the specified student.
+- Existing organization and staff authorization rules shall apply.
+- Cross-organization access shall fail closed.
+
+Response contract:
+
+{
+  "repeated_mistakes": [
+    {
+      "concept": {
+        "id": "uuid",
+        "name": "Equivalent Fractions",
+        "code": "EQUIVALENT_FRACTIONS"
+      },
+      "incorrect_responses": 3,
+      "distinct_questions": 3,
+      "distinct_attempts": 2
+    }
+  ]
+}
+
+For the staff endpoint only, the response may additionally include:
+
+{
+  "student": {
+    "id": "uuid",
+    "full_name": "Student Name"
+  }
+}
+
+Field definitions:
+
+- concept.id:
+  The knowledge_items ID for the primary concept.
+
+- concept.name:
+  The authoritative concept name from knowledge_items.
+
+- concept.code:
+  The authoritative concept code from knowledge_items.
+
+- incorrect_responses:
+  Number of qualifying incorrect responses associated with the primary concept.
+
+- distinct_questions:
+  Number of distinct questions contributing to the qualifying evidence.
+
+- distinct_attempts:
+  Number of distinct submitted attempts contributing to the qualifying evidence.
+
+Detection eligibility remains exactly as defined by Decisions #21–#24:
+
+- incorrect_responses >= 3
+- distinct_questions >= 3
+- distinct_attempts >= 2
+- all qualifying responses belong to the same primary concept
+- practice and formal assessment evidence may contribute together
+- only primary concepts contribute to detection
+- secondary concepts do not contribute to the threshold
+
+Ordering:
+
+Repeated-mistake records shall use deterministic ordering by concept.name ascending.
+
+Empty result:
+
+{
+  "repeated_mistakes": []
+}
+
+No repeated-mistake record shall be returned unless it satisfies all required detection criteria.
+
+US-105 shall NOT return:
+
+- raw question text
+- student's selected answers
+- correct answers
+- answer explanations
+- individual answer history
+- scores
+- percentages
+- mastery values
+- weakness/strength scores
+- severity scores
+- AI-generated explanations
+- recommendations
+- rankings
+- secondary concepts as separate mistake records
+
+US-105 is derived, read-only intelligence.
+
+No separate stored "mistake" record or mistake snapshot is authorized by this decision.
+
+The API shall calculate the response from the authoritative question_concepts mappings and existing submitted practice/formal assessment answer history.
+
+The response contract shall not modify or reinterpret Epic 8 or Epic 9 scoring/result semantics.
+
+
+End of document.

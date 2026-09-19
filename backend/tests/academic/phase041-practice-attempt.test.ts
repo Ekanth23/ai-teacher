@@ -485,6 +485,46 @@ describe("submit attempt", () => {
     expect(res.body.unanswered_count).toBe(0);
   });
 
+  it("scores zero when every answer is incorrect", async () => {
+    const f = await studentFixture("submit-all-wrong");
+    const { practiceId, questions } = await publishedPractice(f);
+    const { attemptId } = await startAttempt(f, practiceId);
+
+    await request(app).put(`/api/student/attempts/${attemptId}/answers`)
+      .set(auth(f.studentToken, f.organizationId))
+      .send({ answers: [
+        { question_id: questions[0].id, selected_option: "A" },
+        { question_id: questions[1].id, selected_option: "A" },
+        { question_id: questions[2].id, selected_option: "B" },
+      ] });
+
+    const res = await request(app).post(`/api/student/attempts/${attemptId}/submit`)
+      .set(auth(f.studentToken, f.organizationId));
+    expect(res.status).toBe(200);
+    expect(res.body.score).toBe(0);
+    expect(res.body.max_score).toBe(4);
+    expect(res.body.percentage).toBe(0);
+    expect(res.body.correct_count).toBe(0);
+    expect(res.body.incorrect_count).toBe(3);
+    expect(res.body.unanswered_count).toBe(0);
+  });
+
+  it("counts every question as unanswered when none are answered", async () => {
+    const f = await studentFixture("submit-all-unanswered");
+    const { practiceId } = await publishedPractice(f);
+    const { attemptId } = await startAttempt(f, practiceId);
+
+    const res = await request(app).post(`/api/student/attempts/${attemptId}/submit`)
+      .set(auth(f.studentToken, f.organizationId));
+    expect(res.status).toBe(200);
+    expect(res.body.score).toBe(0);
+    expect(res.body.max_score).toBe(4);
+    expect(res.body.percentage).toBe(0);
+    expect(res.body.correct_count).toBe(0);
+    expect(res.body.incorrect_count).toBe(0);
+    expect(res.body.unanswered_count).toBe(3);
+  });
+
   it("rejects a second submission", async () => {
     const f = await studentFixture("submit-twice");
     const { practiceId } = await publishedPractice(f);

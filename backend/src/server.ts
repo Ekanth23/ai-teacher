@@ -30,11 +30,13 @@ import {
 } from "./auth/tokens.js";
 import curriculumRoutes from "./modules/curriculum/routes.js";
 import academicRoutes from "./modules/academic/routes.js";
+import assessmentExecutionRoutes from "./modules/academic/assessment-execution/routes.js";
 import contentRoutes from "./modules/content/routes.js";
 import reportingRoutes from "./modules/reporting/routes.js";
 import studentRoutes from "./modules/student/routes.js";
 import practiceRoutes from "./modules/practice/routes.js";
 import studentPracticeRoutes from "./modules/practice/student.routes.js";
+import progressRoutes from "./modules/progress/routes.js";
 
 const PORT = 3000;
 type OrganizationDatabase = {
@@ -87,11 +89,13 @@ export function createApp(organizationDatabase: OrganizationDatabase = pool) {
   app.use(express.json());
   app.use(curriculumRoutes);
   app.use(academicRoutes);
+  app.use(assessmentExecutionRoutes);
   app.use(contentRoutes);
   app.use(reportingRoutes);
   app.use(studentRoutes);
   app.use(practiceRoutes);
   app.use(studentPracticeRoutes);
+  app.use(progressRoutes);
   app.use("/api/ai", aiRoutes);
 
   app.get("/api/health", (req, res) => {

@@ -1,7 +1,8 @@
 import type {
   ClassSubjectsResponse,
-  ClassListResponse,
   ChapterResponse,
+  ChapterTopicsResponse,
+  ClassListResponse,
   StructureChaptersResponse,
 } from "../../types/learning";
 import { request } from "./client";
@@ -42,4 +43,16 @@ export function getStructureChapters(structureId: string) {
 /** GET /api/curriculum/chapters/:chapterId */
 export function getChapter(chapterId: string) {
   return request<ChapterResponse>(`/api/curriculum/chapters/${chapterId}`);
+}
+
+/**
+ * GET /api/curriculum/chapters/:chapterId/topics
+ *
+ * Topics for a specific chapter. The chapter is validated by the frontend and
+ * the backend authorizes access through the chapter's class enrollment.
+ */
+export function getChapterTopics(chapterId: string) {
+  return request<ChapterTopicsResponse>(
+    `/api/curriculum/chapters/${chapterId}/topics`,
+  );
 }

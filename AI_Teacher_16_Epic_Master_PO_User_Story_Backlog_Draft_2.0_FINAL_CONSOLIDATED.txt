@@ -1,0 +1,677 @@
+# AI TEACHER — 16-EPIC MASTER PRODUCT OWNER BACKLOG — DRAFT 2.0
+# CONSOLIDATED IMPLEMENTATION BASELINE
+*(Authoritative Product Owner backlog and implementation-control baseline. Backlog scope/ownership is frozen for implementation; five legacy reconciliation items remain explicitly open and do not block the current Epic 8 implementation path. No silent scope changes.)*
+
+---
+
+## SECTION A — DRAFT 2.0 EXECUTIVE SUMMARY
+
+- **Draft 1.0** (`AI_Teacher_16_Epic_Master_PO_User_Story_Backlog.txt`) is the original source backlog (sequential US-001–US-178, uneven story counts).
+- **Draft 2.0** is the consolidated Product Owner backlog built from Draft 1.0 content + all established PO decisions.
+- **Approved numbering** is US-001–US-166 (Epic 1 = 16 slots; Epics 2–16 = 10 slots each). Historical Draft 1.0 IDs are superseded where they conflict with the approved framework and are retained only as traceability.
+- **Retirements**: US-037–041, US-042–046, and US-084 are permanent; retired IDs are never reused.
+- **Phase boundaries are frozen**: Epic 7 owns Phase 2 homework/assignment workflow; Epic 8 owns Phase 1 self-directed practice/results; Epic 9 owns Phase 2 formal/scheduled assessments; Epic 10 owns derived progress/mastery; Epic 11 owns learning-gap intelligence; Epic 12 owns AI Teacher/personalization; Epic 13 owns RAG/content intelligence; Epic 15 consumes derived learning/assessment data; Epic 16 owns platform operations/security verification.
+- **Implementation status is updated through Epic 8 Slice A** using the verified Cline implementation report: migrations 039–040 applied, 27 focused tests passed, 628/628 full regression tests passed, and TypeScript typecheck passed.
+- **No downstream Epics 9–16 are claimed implemented by this document.**
+
+---
+
+## SECTION B — FINAL 16-EPIC MASTER BACKLOG
+
+### Epic 1 — Platform Foundation & Identity (US-001–US-016)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 1 | US-001 | User registration | ACTIVE | |
+| 1 | US-002 | User login | ACTIVE | |
+| 1 | US-003 | Password hashing and secure credential storage | ACTIVE | |
+| 1 | US-004 | JWT authentication | ACTIVE | |
+| 1 | US-005 | Refresh-token rotation | ACTIVE | |
+| 1 | US-006 | Refresh-token reuse detection | ACTIVE | |
+| 1 | US-007 | Logout and token revocation | ACTIVE | |
+| 1 | US-008 | Authentication middleware | ACTIVE | |
+| 1 | US-009 | Organization management | ACTIVE | |
+| 1 | US-010 | Organization membership | ACTIVE | |
+| 1 | US-011 | Role management and authorization | ACTIVE | |
+| 1 | US-012 | Organization-scoped authorization | ACTIVE | |
+| 1 | US-013 | Active organization context | ACTIVE | |
+| 1 | US-014 | Secure student foundation | ACTIVE | |
+| 1 | US-015 | Conversation/message foundation | ACTIVE | |
+| 1 | US-016 | Authentication and security test coverage | ACTIVE | |
+
+### Epic 2 — Academic Organization (US-017–US-026)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 2 | US-017 | Manage boards | ACTIVE | re-scope candidate |
+| 2 | US-018 | Manage mediums | ACTIVE | re-scope candidate |
+| 2 | US-019 | Manage classes / grades | ACTIVE | |
+| 2 | US-020 | Manage academic structures | ACTIVE | overlaps US-022 (PO decision) |
+| 2 | US-021 | Manage chapters | ACTIVE | |
+| 2 | US-022 | Manage curriculum structures | ACTIVE | overlaps US-020 |
+| 2 | US-023 | Associate curriculum structure with subject | ACTIVE | dup US-024 (PO decision) |
+| 2 | US-024 | Update curriculum structure subject | ACTIVE | dup US-023 |
+| 2 | US-025 | Manage topics | ACTIVE | |
+| 2 | US-026 | Manage learning-resource association | ACTIVE | overlaps Epic 5 US-053 |
+
+### Epic 3 — People, Classes & Enrollment (US-027–US-036)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 3 | US-027 | Teacher profile management | ACTIVE | |
+| 3 | US-028 | Student profile management | ACTIVE | |
+| 3 | US-029 | Parent profile management | ACTIVE | |
+| 3 | US-030 | Class/teacher assignment | ACTIVE | |
+| 3 | US-031 | Class/batch management | ACTIVE | |
+| 3 | US-032 | Subject management and class-subject mapping | ACTIVE | |
+| 3 | US-033 | Student enrollment | ACTIVE | |
+| 3 | US-034 | Invitation management | ACTIVE | |
+| 3 | US-035 | Organization member management | ACTIVE | |
+| 3 | US-036 | Role and permission management | ACTIVE | |
+
+### Epic 4 — (US-037–US-046)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 4 | US-037 | Homework/assignment creation | RETIRED / VOIDED | → Epic 7 US-067 |
+| 4 | US-038 | Homework/assignment distribution | RETIRED / VOIDED | → Epic 7 US-070 |
+| 4 | US-039 | Student submission | RETIRED / VOIDED | → Epic 7 US-071 |
+| 4 | US-040 | Teacher review and feedback | RETIRED / VOIDED | → Epic 7 US-073/074 |
+| 4 | US-041 | Assignment status/lifecycle management | RETIRED / VOIDED | → Epic 7 US-075 |
+| 4 | US-042 | Assessment creation | RETIRED / VOIDED | → Epic 9 US-087 |
+| 4 | US-043 | Assessment attempt/submission | RETIRED / VOIDED | → Epic 9 US-089/090/091 |
+| 4 | US-044 | Assessment evaluation | RETIRED / VOIDED | → Epic 9 US-092 |
+| 4 | US-045 | Assessment results | RETIRED / VOIDED | → Epic 9 US-093; Epic 8 US-085 only views Phase 1 practice results |
+| 4 | US-046 | Student progress tracking | RETIRED / VOIDED | → Epic 10 |
+
+### Epic 5 — Learning Resources & Content (US-047–US-056)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 5 | US-047 | Learning resource creation and management | ACTIVE | |
+| 5 | US-048 | Learning resource categorization and organization | ACTIVE | |
+| 5 | US-049 | Learning resource upload and storage | ACTIVE | |
+| 5 | US-050 | Learning resource approval and publishing | ACTIVE | |
+| 5 | US-051 | Learning resource versioning | ACTIVE | |
+| 5 | US-052 | Learning resource search and discovery | ACTIVE | |
+| 5 | US-053 | Learning resource assignment to classes/subjects | ACTIVE | overlaps Epic 2 US-026 |
+| 5 | US-054 | Learning resource access and availability | ACTIVE | boundary vs Epic 8 US-082 |
+| 5 | US-055 | Learning resource archive and lifecycle management | ACTIVE | |
+| 5 | US-056 | Learning resource usage and engagement tracking | ACTIVE | |
+
+### Epic 6 — Curriculum & Academic Content (US-057–US-066)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 6 | US-057 | Curriculum structure management | ACTIVE | overlaps Epic 2 US-020/022 |
+| 6 | US-058 | Subject/chapter/topic organization | ACTIVE | |
+| 6 | US-059 | Curriculum content mapping | ACTIVE | |
+| 6 | US-060 | Curriculum resource mapping | ACTIVE | |
+| 6 | US-061 | Curriculum version management | ACTIVE | |
+| 6 | US-062 | Curriculum publishing and lifecycle | ACTIVE | |
+| 6 | US-063 | Curriculum search and discovery | ACTIVE | |
+| 6 | US-064 | Curriculum access and availability | ACTIVE | |
+| 6 | US-065 | Curriculum gap identification | ACTIVE | |
+| 6 | US-066 | Curriculum coverage and progress tracking | ACTIVE | |
+
+### Epic 7 — Homework & Assignments (US-067–US-076)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 7 | US-067 | Homework and assignment creation | ACTIVE | |
+| 7 | US-068 | Assignment instructions and content | ACTIVE | |
+| 7 | US-069 | Assignment scheduling and due dates | ACTIVE | |
+| 7 | US-070 | Assignment distribution to students/classes | ACTIVE | |
+| 7 | US-071 | Student assignment submission | ACTIVE | sole submission owner |
+| 7 | US-072 | Assignment submission tracking | ACTIVE | |
+| 7 | US-073 | Teacher assignment review | ACTIVE | |
+| 7 | US-074 | Assignment grading and feedback | ACTIVE | boundary vs Epic 8 US-086 |
+| 7 | US-075 | Assignment status and lifecycle management | ACTIVE | |
+| 7 | US-076 | Assignment notifications and reminders | ACTIVE | |
+
+### Epic 8 — Student Learning Experience (US-077–US-086)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 8 | US-077 | Student dashboard | ACTIVE | |
+| 8 | US-078 | View current class | ACTIVE | |
+| 8 | US-079 | View subjects | ACTIVE | |
+| 8 | US-080 | View chapters | ACTIVE | |
+| 8 | US-081 | View topics | ACTIVE | |
+| 8 | US-082 | Access approved learning resources | ACTIVE | boundary vs Epic 5 US-054 |
+| 8 | US-083 | View homework | DEFERRED — PHASE 2 | Formal homework/assignment viewing belongs to Epic 7 Phase 2; not required by Phase 1 dashboard |
+| 8 | US-084 | Submit learning work | RETIRED / VOIDED | → Epic 7 US-071; self-directed practice submission is owned by the Epic 8 Practice loop |
+| 8 | US-085 | View results | ACTIVE — DEPENDS ON PRACTICE FOUNDATION | Read-only student retrieval of Epic 8 practice attempt results; requires Slice B result persistence |
+| 8 | US-086 | View teacher feedback | DEFERRED — PHASE 2 | Epic 7 US-074 is the source of teacher grading/feedback |
+
+### Epic 9 — Assessments & Examination (US-087–US-096)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 9 | US-087 | Create assessment | ACTIVE — PHASE 2 | Draft US-082; formal/scheduled school assessment; independent of Epic 8 practice |
+| 9 | US-088 | Manage assessment questions | ACTIVE — PHASE 2 | Draft US-083; formal assessment question definition |
+| 9 | US-089 | Student starts assessment attempt | ACTIVE — PHASE 2 | Draft US-084; separate formal-assessment attempt loop; not Epic 8 attempts |
+| 9 | US-090 | Save assessment answers | ACTIVE — PHASE 2 | Draft US-085; separate formal-assessment answers |
+| 9 | US-091 | Submit assessment | ACTIVE — PHASE 2 | Draft US-086; separate formal-assessment submission |
+| 9 | US-092 | Calculate assessment result | ACTIVE — PHASE 2 | Draft US-087; formal assessment evaluation |
+| 9 | US-093 | Store assessment result | ACTIVE — PHASE 2 | Draft US-088; formal assessment result source for Epic 10/15 |
+| 9 | US-094 | Teacher reviews assessment results | ACTIVE — PHASE 2 | Draft US-089; teacher review of formal assessment results |
+| 9 | US-095 | Question bank | DEFERRED — ADVANCED | Draft US-090; future; not required for first formal-assessment implementation |
+| 9 | US-096 | Topic tests | ACTIVE — PHASE 2 FORMAL EXAM | Draft US-091 (absorbs "Mock examinations"); formal/scheduled exam; Phase 1 topic practice belongs to Epic 8 |
+
+### Epic 10 — Student Progress, Mastery & Learning Profile (US-097–US-106)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 10 | US-097 | Track subject progress | ACTIVE | Draft US-093; consumes Epic 8 practice results for derived progress |
+| 10 | US-098 | Track chapter progress | ACTIVE | Draft US-094; consumes Epic 8 practice results for derived progress |
+| 10 | US-099 | Track topic progress | ACTIVE | Draft US-095; consumes Epic 8 practice results for derived progress |
+| 10 | US-100 | Track homework performance | ACTIVE | Draft US-096; consumes Epic 7 homework/assignment data; Phase 2 |
+| 10 | US-101 | Track assessment performance | ACTIVE | Draft US-097; consumes Epic 8 practice + Epic 9 formal assessment results |
+| 10 | US-102 | Identify weak topics | ACTIVE | Draft US-098; derived intelligence, not raw score storage |
+| 10 | US-103 | Identify strong topics | ACTIVE | Draft US-099; derived intelligence, not raw score storage |
+| 10 | US-104 | Identify unfinished learning | ACTIVE | Draft US-100; derived intelligence |
+| 10 | US-105 | Detect repeated mistakes | ACTIVE | Draft US-101; derived intelligence from answer/result history |
+| 10 | US-106 | Student learning profile | ACTIVE | Draft US-102 (absorbs "capability profile"); aggregated learning profile, not a raw result store |
+
+### Epic 11 — Curriculum Intelligence & Learning Gaps (US-107–US-116)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 11 | US-107 | Compare curriculum structures | ACTIVE | Draft US-104 |
+| 11 | US-108 | Identify curriculum gaps | ACTIVE | Draft US-105 |
+| 11 | US-109 | Identify conceptual gaps | ACTIVE | Draft US-106; Distinguish curriculum-level conceptual gap from student-specific misunderstanding |
+| 11 | US-110 | Identify prerequisite gaps | ACTIVE | Draft US-107 |
+| 11 | US-111 | Student-specific learning gaps | ACTIVE | Draft US-108; Depends on Epic 10 derived mastery/progress intelligence |
+| 11 | US-112 | State Board → CBSE bridge | ACTIVE | Draft US-109 |
+| 11 | US-113 | Bridge learning recommendations | ACTIVE | Draft US-110; Depends on Epic 11 gap intelligence + Epic 10 advanced profile |
+| 11 | US-114 | Optional competitive learning pathways | ACTIVE | Draft US-111 |
+| 11 | US-115 | (none) | RESERVED — NO DISTINCT STORY | |
+| 11 | US-116 | (none) | RESERVED — NO DISTINCT STORY | |
+
+### Epic 12 — AI Teacher / AI Tutor (US-117–US-126)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 12 | US-117 | Student asks AI Teacher a question | ACTIVE | Draft US-112 |
+| 12 | US-118 | Build student learning context | ACTIVE | Draft US-113; May consume Epic 8 practice history/results and later Epic 10 profile |
+| 12 | US-119 | Board-aware AI response | ACTIVE | Draft US-114 |
+| 12 | US-120 | Medium/language-aware response | ACTIVE | Draft US-115 |
+| 12 | US-121 | Class-aware explanation | ACTIVE | Draft US-116 |
+| 12 | US-122 | Subject/topic-aware response | ACTIVE | Draft US-117 |
+| 12 | US-123 | Explain concepts step-by-step | ACTIVE | Draft US-118 (absorbs "Provide examples") |
+| 12 | US-124 | Guided / Socratic learning | ACTIVE | Draft US-120 |
+| 12 | US-125 | AI homework assistance | ACTIVE — PHASE 2 | Draft US-121; Depends on Epic 7 homework/assignment workflow |
+| 12 | US-126 | Personalized practice generation | ACTIVE — ADVANCED | Draft US-122 (absorbs "AI revision assistance"); Targets Epic 8 practice model; not first MVP |
+
+### Epic 13 — AI Knowledge, RAG & Agent Platform (US-127–US-136)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 13 | US-127 | Document ingestion | ACTIVE — ADVANCED | Draft US-124; future upstream; does not block Epic 8 |
+| 13 | US-128 | Document extraction and cleaning | ACTIVE | Draft US-125 |
+| 13 | US-129 | Content chunking | ACTIVE | Draft US-126 |
+| 13 | US-130 | Content metadata | ACTIVE | Draft US-127 |
+| 13 | US-131 | Embedding/indexing | ACTIVE | Draft US-128 |
+| 13 | US-132 | Vector retrieval | ACTIVE | Draft US-129 |
+| 13 | US-133 | Tenant-aware RAG | ACTIVE | Draft US-130 |
+| 13 | US-134 | Approved-content retrieval | ACTIVE | Draft US-131 |
+| 13 | US-135 | AI context orchestration | ACTIVE | Draft US-132 (absorbs US-133/134) |
+| 13 | US-136 | AI guardrails | ACTIVE | Draft US-136 (absorbs "AI evaluation framework") |
+
+### Epic 14 — AI Economics, Usage & Subscription (US-137–US-146)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 14 | US-137 | Record AI request | ACTIVE | Draft US-137 |
+| 14 | US-138 | Track input tokens | ACTIVE | Draft US-138 |
+| 14 | US-139 | Track output tokens | ACTIVE | Draft US-139 |
+| 14 | US-140 | Calculate AI cost | ACTIVE | Draft US-140 |
+| 14 | US-141 | Attribute AI cost | ACTIVE | Draft US-141 |
+| 14 | US-142 | Model abstraction | ACTIVE | Draft US-142 |
+| 14 | US-143 | BASIC / STANDARD / ADVANCED model tiers | ACTIVE | Draft US-143 |
+| 14 | US-144 | Intelligent model routing | ACTIVE | Draft US-144 |
+| 14 | US-145 | AI usage limits (student + institution) | ACTIVE | Draft US-145+146+149 |
+| 14 | US-146 | Subscription entitlement | ACTIVE | Draft US-148+147 |
+
+### Epic 15 — Administration, Analytics & Parent Portal (US-147–US-156)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 15 | US-147 | Organization administration dashboard | ACTIVE | Draft US-151 |
+| 15 | US-148 | Manage organization users | ACTIVE | Draft US-152 |
+| 15 | US-149 | Institution analytics | ACTIVE — DERIVED | Draft US-156+157; Consumes Epic 8/Epic 9/Epic 10 data; Phase 1 metric source includes Epic 8 |
+| 15 | US-150 | Teacher performance analytics | ACTIVE | Draft US-158 |
+| 15 | US-151 | Student performance analytics | ACTIVE — DERIVED | Draft US-159; Consumes Epic 8 practice + Epic 9 assessment data |
+| 15 | US-152 | Parent links to student | ACTIVE | Draft US-160 |
+| 15 | US-153 | Parent views progress | ACTIVE — PHASE 2 | Draft US-161; Consumes Epic 10 derived progress |
+| 15 | US-154 | Parent views homework status | ACTIVE | Draft US-162 |
+| 15 | US-155 | Parent views assessment results | ACTIVE — PHASE 2 | Draft US-163; Formal assessment results; Phase 1 practice results remain student-only |
+| 15 | US-156 | Parent learning report | ACTIVE — PHASE 2/ADVANCED | Draft US-164; Depends on Epic 8 + Epic 9 + Epic 10 derived data |
+
+### Epic 16 — Platform Operations, Security, Quality & Growth (US-157–US-166)
+
+| Epic | US ID | Story Title | Status | Notes |
+|---|---|---|---|---|
+| 16 | US-157 | Audit logging | ACTIVE | Draft US-165 |
+| 16 | US-158 | Security monitoring | ACTIVE | Draft US-166 |
+| 16 | US-159 | Tenant-isolation verification | ACTIVE | Draft US-167; coverage includes Epic 8 practice tables |
+| 16 | US-160 | API observability | ACTIVE | Draft US-168 |
+| 16 | US-161 | Application health monitoring | ACTIVE | Draft US-169 |
+| 16 | US-162 | Error monitoring | ACTIVE | Draft US-170 |
+| 16 | US-163 | Performance monitoring | ACTIVE | Draft US-171 |
+| 16 | US-164 | Automated regression strategy | ACTIVE | Draft US-172 |
+| 16 | US-165 | Backup / recovery | ACTIVE | Draft US-174 |
+| 16 | US-166 | Production deployment | ACTIVE | Draft US-175+176 |
+
+---
+
+## SECTION C — FINAL NUMBERING MATRIX
+
+| Epic | Final Range | Active Stories | Retired/Reserved | Status |
+|---|---|---|---|---|
+| Epic 1 | US-001–016 | 16 | 0 | COMPLETE |
+| Epic 2 | US-017–026 | 10 | 0 | COMPLETE (2 corrections flagged) |
+| Epic 3 | US-027–036 | 10 | 0 | COMPLETE |
+| Epic 4 | US-037–046 | 0 | 10 retired | COMPLETE — assessment/progress ownership moved to Epics 9/10 |
+| Epic 5 | US-047–056 | 10 | 0 | COMPLETE |
+| Epic 6 | US-057–066 | 10 | 0 | COMPLETE |
+| Epic 7 | US-067–076 | 10 | 0 | COMPLETE |
+| Epic 8 | US-077–086 | 7 | 1 retired, 2 deferred | ACTIVE — Slice A complete; Slice B/C pending |
+| Epic 9 | US-087–096 | 9 | 1 deferred | READY — Phase 2 formal assessment boundary frozen |
+| Epic 10 | US-097–106 | 10 | 0 | COMPLETE |
+| Epic 11 | US-107–116 | 8 | 2 reserved | COMPLETE (2 reserved slots) |
+| Epic 12 | US-117–126 | 10 | 0 | COMPLETE |
+| Epic 13 | US-127–136 | 10 | 0 | COMPLETE |
+| Epic 14 | US-137–146 | 10 | 0 | COMPLETE |
+| Epic 15 | US-147–156 | 10 | 0 | COMPLETE |
+| Epic 16 | US-157–166 | 10 | 0 | COMPLETE |
+
+**No active cross-Epic ID collisions. No reused retired IDs.**
+
+---
+
+## SECTION D — CURRENT IMPLEMENTATION STATUS
+
+| Scope | Status | Evidence |
+|---|---|---|
+| Epic 8 US-077–US-082 | IMPLEMENTED / VERIFIED | Student dashboard, class, subjects, chapters, topics, and approved resource access were previously reconciled and tested. |
+| Epic 8 Slice A — Practice & Question Definition Foundation | **COMPLETE / VERIFIED** | Migrations 039–040 applied; 27/27 focused tests; 49 test files / 628 tests passed; TypeScript clean. |
+| Epic 8 Slice B — Attempt / Answer / Submit / Evaluate / Persist | NEXT | Not implemented in Cline Slice A report. |
+| Epic 8 US-085 — View Results / Slice C | BLOCKED BY SLICE B | Result source requires `practice_attempts` + `practice_attempt_answers` and deterministic evaluation persistence. |
+| Epic 9–16 | NOT YET IMPLEMENTED BY THIS BASELINE | Scope/dependencies are defined; no implementation is claimed. |
+
+## SECTION D — RETIRED STORIES
+
+| Original ID | Story Title | Superseded By | Reason |
+|---|---|---|---|
+| US-037 | Homework/assignment creation | Epic 7 US-067 | Duplicate |
+| US-038 | Homework/assignment distribution | Epic 7 US-070 | Duplicate |
+| US-039 | Student submission | Epic 7 US-071 | Duplicate |
+| US-040 | Teacher review and feedback | Epic 7 US-073/074 | Duplicate |
+| US-041 | Assignment status/lifecycle management | Epic 7 US-075 | Duplicate |
+| US-042 | Assessment creation | Epic 9 US-087 | Assessment ownership moved to Epic 9 |
+| US-043 | Assessment attempt/submission | Epic 9 US-089/090/091 | Assessment ownership moved to Epic 9 |
+| US-044 | Assessment evaluation | Epic 9 US-092 | Assessment ownership moved to Epic 9 |
+| US-045 | Assessment results | Epic 9 US-093 | Assessment result ownership moved to Epic 9; Epic 8 US-085 views only Phase 1 practice results |
+| US-046 | Student progress tracking | Epic 10 | Derived progress ownership moved to Epic 10 |
+| US-084 | Submit learning work | Epic 7 US-071 | Duplicate / formal assignment submission owner |
+
+| Draft US-150 | Profitability / margin monitoring | — | Out of usage scope |
+| Draft US-153 | Manage teachers | Epic 3 US-027 | Duplicate |
+| Draft US-154 | Manage students | Epic 3 US-028 | Duplicate |
+| Draft US-155 | Manage classes | Epic 3 US-031 | Duplicate |
+| Draft US-173 | AI quality evaluation | Epic 13 US-135/136 | Duplicate |
+| Draft US-177 | Subscription plan management | Epic 14 US-146 | Duplicate |
+| Draft US-178 | Feature entitlement management | Epic 14 US-146 | Duplicate |
+
+---
+
+## SECTION E — CROSS-EPIC BOUNDARIES
+
+| Domain | Owner / Production | Consumer / Viewing | Frozen Boundary |
+|---|---|---|---|
+| Learning resources | Epic 5 US-047–056 (including approval/access mechanisms) | Epic 8 US-082 | MANAGEMENT/ACCESS MECHANISM vs STUDENT CONSUMPTION |
+| Phase 1 practice results | Epic 8 Practice foundation + Slice B evaluation/persistence | Epic 8 US-085 | PRACTICE RESULT PRODUCTION + STUDENT VIEWING stay inside Epic 8 |
+| Formal assessment results | Epic 9 US-087–094 | Epic 10/15; teacher review in Epic 9 US-094 | Epic 9 is the sole Phase 2 formal assessment result owner |
+| Homework / assignments | Epic 7 US-067–076 | Epic 8 US-083 deferred Phase 2; Epic 12 US-125 assistance | Epic 7 owns assignment workflow, submission, grading, feedback |
+| Teacher feedback | Epic 7 US-074 | Epic 8 US-086 deferred Phase 2 | Epic 7 produces; Epic 8 later consumes/views |
+| Curriculum | Epic 2/6 | Epic 8 US-078–082 | MANAGEMENT vs STUDENT CONSUMPTION |
+| Progress / mastery | Epic 10 | Epic 11/12/15 | DERIVED INTELLIGENCE, not raw score/result storage |
+| Learning gaps | Epic 11 | Epic 12/15 | GAP INTELLIGENCE, not duplicate mastery |
+| RAG/content intelligence | Epic 13 | Epic 8/12 future consumers | FUTURE UPSTREAM; never blocks first Epic 8 MVP |
+| Tenant isolation | Epic 16 verification | All modules | Cross-tenant security is a platform-wide invariant |
+
+## SECTION F — DRAFT 1.0 → DRAFT 2.0 TRACEABILITY (where numbering changed)
+
+| Draft 1.0 ID | Draft 1.0 Story | Draft 2.0 ID | Draft 2.0 Epic | Disposition |
+|---|---|---|---|---|
+| US-030 | School / coaching administrator profile | — | — | PO DECISION REQUIRED |
+| US-034 | Assign teacher to class | US-030 | 3 | MOVED |
+| US-035 | View active enrollment | US-033 | 3 | SUBSUMED |
+| US-036 | Maintain enrollment history | — | — | PO DECISION REQUIRED |
+| US-037 | Manage syllabus | US-057/US-061 | 6 | MOVED |
+| US-038 | Manage syllabus versions | US-061 | 6 | MOVED |
+| US-039 | Associate syllabus with academic context | US-057/US-061 | 6 | MOVED |
+| US-040 | Manage curriculum hierarchy | US-057/US-058 | 6 | MOVED |
+| US-041 | Manage curriculum versioning | US-061 | 6 | MOVED |
+| US-042 | Manage academic-year curriculum | US-061 | 6 | MOVED |
+| US-043 | Manage curriculum mappings | US-059 | 6 | MOVED |
+| US-044 | Create learning resource | US-047 | 5 | MOVED |
+| US-045 | View learning resources | US-052 | 5 | MOVED |
+| US-046 | Update learning resource | US-047 | 5 | MOVED |
+| US-047 | Publish learning resource | US-050 | 5 | MOVED |
+| US-048 | Archive learning resource | US-055 | 5 | MOVED |
+| US-049 | Associate resource with topic | US-053 | 5 | MOVED |
+| US-050 | Manage resource metadata | US-048 | 5 | MOVED |
+| US-051 | Manage organization-owned content | US-047/US-053 | 5 | MOVED |
+| US-052 | Approve content for AI retrieval | US-050/US-054 | 5 | MOVED |
+| US-053…US-059 | Teacher Workspace (7 stories) | — | — | OPEN LEGACY PO DECISION — no current home; does not block Epic 8 |
+| US-060 | Create homework / assignment | US-067 | 7 | MOVED |
+| US-061 | Save assignment as draft | US-067 | 7 | MERGED |
+| US-062 | Publish assignment | US-067/US-070 | 7 | MOVED |
+| US-063 | Open / close assignment | US-075 | 7 | MOVED |
+| US-064 | Student views assignment | US-083 | 8 | MOVED |
+| US-065 | Student submits assignment | US-071 | 7 | MOVED |
+| US-066 | Track assignment completion | US-072 | 7 | MOVED |
+| US-067 | Track overdue assignment | US-072/US-069 | 7 | MOVED |
+| US-068 | Teacher views submissions | US-072/US-073 | 7 | MOVED |
+| US-069 | Teacher reviews submission | US-073 | 7 | MOVED |
+| US-070 | Teacher gives marks | US-074 | 7 | MOVED |
+| US-071 | Teacher gives feedback | US-074 | 7 | MOVED |
+| US-072 | Student dashboard | US-077 | 8 | MOVED |
+| US-073 | View current class | US-078 | 8 | MOVED |
+| US-074 | View subjects | US-079 | 8 | MOVED |
+| US-075 | View chapters | US-080 | 8 | MOVED |
+| US-076 | View topics | US-081 | 8 | MOVED |
+| US-077 | Access approved learning resources | US-082 | 8 | MOVED |
+| US-078 | View homework | US-083 | 8 | MOVED |
+| US-079 | Submit learning work | US-084 | 8 | MOVED → RETIRED; Epic 7 US-071 owns formal assignment submission |
+| US-080 | View results | US-085 | 8 | MOVED; now explicitly Phase 1 practice-result viewing after Epic 8 Slice B |
+| US-081 | View teacher feedback | US-086 | 8 | MOVED |
+| US-082 | Create assessment | US-087 | 9 | MOVED |
+| US-083 | Manage assessment questions | US-088 | 9 | MOVED |
+| US-084 | Student starts assessment attempt | US-089 | 9 | MOVED |
+| US-085 | Save assessment answers | US-090 | 9 | MOVED |
+| US-086 | Submit assessment | US-091 | 9 | MOVED |
+| US-087 | Calculate assessment result | US-092 | 9 | MOVED |
+| US-088 | Store assessment result | US-093 | 9 | MOVED |
+| US-089 | Teacher reviews assessment results | US-094 | 9 | MOVED |
+| US-090 | Question bank | US-095 | 9 | MOVED |
+| US-091 | Topic tests | US-096 | 9 | MOVED |
+| US-092 | Mock examinations | US-096 | 9 | MERGED |
+| US-093 | Track subject progress | US-097 | 10 | MOVED |
+| US-094 | Track chapter progress | US-098 | 10 | MOVED |
+| US-095 | Track topic progress | US-099 | 10 | MOVED |
+| US-096 | Track homework performance | US-100 | 10 | MOVED |
+| US-097 | Track assessment performance | US-101 | 10 | MOVED |
+| US-098 | Identify weak topics | US-102 | 10 | MOVED |
+| US-099 | Identify strong topics | US-103 | 10 | MOVED |
+| US-100 | Identify unfinished learning | US-104 | 10 | MOVED |
+| US-101 | Detect repeated mistakes | US-105 | 10 | MOVED |
+| US-102 | Student learning profile | US-106 | 10 | MOVED |
+| US-103 | Student capability profile | US-106 | 10 | MERGED |
+| US-104 | Compare curriculum structures | US-107 | 11 | MOVED |
+| US-105 | Identify curriculum gaps | US-108 | 11 | MOVED |
+| US-106 | Identify conceptual gaps | US-109 | 11 | MOVED |
+| US-107 | Identify prerequisite gaps | US-110 | 11 | MOVED |
+| US-108 | Student-specific learning gaps | US-111 | 11 | MOVED |
+| US-109 | State Board → CBSE bridge | US-112 | 11 | MOVED |
+| US-110 | Bridge learning recommendations | US-113 | 11 | MOVED |
+| US-111 | Optional competitive learning pathways | US-114 | 11 | MOVED |
+| US-112 | Student asks AI Teacher a question | US-117 | 12 | MOVED |
+| US-113 | Build student learning context | US-118 | 12 | MOVED |
+| US-114 | Board-aware AI response | US-119 | 12 | MOVED |
+| US-115 | Medium/language-aware response | US-120 | 12 | MOVED |
+| US-116 | Class-aware explanation | US-121 | 12 | MOVED |
+| US-117 | Subject/topic-aware response | US-122 | 12 | MOVED |
+| US-118 | Explain concepts step-by-step | US-123 | 12 | MOVED |
+| US-119 | Provide examples | US-123 | 12 | MERGED |
+| US-120 | Guided / Socratic learning | US-124 | 12 | MOVED |
+| US-121 | AI homework assistance | US-125 | 12 | MOVED |
+| US-122 | Personalized practice generation | US-126 | 12 | MOVED |
+| US-123 | AI revision assistance | US-126 | 12 | MERGED |
+| US-124 | Document ingestion | US-127 | 13 | MOVED |
+| US-125 | Document extraction and cleaning | US-128 | 13 | MOVED |
+| US-126 | Content chunking | US-129 | 13 | MOVED |
+| US-127 | Content metadata | US-130 | 13 | MOVED |
+| US-128 | Embedding/indexing | US-131 | 13 | MOVED |
+| US-129 | Vector retrieval | US-132 | 13 | MOVED |
+| US-130 | Tenant-aware RAG | US-133 | 13 | MOVED |
+| US-131 | Approved-content retrieval | US-134 | 13 | MOVED |
+| US-132 | AI context orchestration | US-135 | 13 | MOVED |
+| US-133 | Agent orchestration foundation | US-135 | 13 | MERGED |
+| US-134 | AI tool calling | US-135 | 13 | MERGED |
+| US-135 | AI evaluation framework | US-136 | 13 | MERGED |
+| US-136 | AI guardrails | US-136 | 13 | MOVED |
+| US-137 | Record AI request | US-137 | 14 | MOVED |
+| US-138 | Track input tokens | US-138 | 14 | MOVED |
+| US-139 | Track output tokens | US-139 | 14 | MOVED |
+| US-140 | Calculate AI cost | US-140 | 14 | MOVED |
+| US-141 | Attribute AI cost | US-141 | 14 | MOVED |
+| US-142 | Model abstraction | US-142 | 14 | MOVED |
+| US-143 | BASIC / STANDARD / ADVANCED model tiers | US-143 | 14 | MOVED |
+| US-144 | Intelligent model routing | US-144 | 14 | MOVED |
+| US-145 | Student AI usage limits | US-145 | 14 | MOVED |
+| US-146 | Institution AI usage limits | US-145 | 14 | MERGED |
+| US-147 | AI credits | US-146 | 14 | MERGED |
+| US-148 | Subscription entitlement | US-146 | 14 | MOVED |
+| US-149 | Heavy-user protection | US-145 | 14 | MERGED |
+| US-150 | Profitability / margin monitoring | — | — | RETIRED |
+| US-151 | Organization administration dashboard | US-147 | 15 | MOVED |
+| US-152 | Manage organization users | US-148 | 15 | MOVED |
+| US-153 | Manage teachers | — | — | RETIRED (dup) |
+| US-154 | Manage students | — | — | RETIRED (dup) |
+| US-155 | Manage classes | — | — | RETIRED (dup) |
+| US-156 | Institution analytics | US-149 | 15 | MOVED |
+| US-157 | Principal / Academic Head analytics | US-149 | 15 | MERGED |
+| US-158 | Teacher performance analytics | US-150 | 15 | MOVED |
+| US-159 | Student performance analytics | US-151 | 15 | MOVED |
+| US-160 | Parent links to student | US-152 | 15 | MOVED |
+| US-161 | Parent views progress | US-153 | 15 | MOVED |
+| US-162 | Parent views homework status | US-154 | 15 | MOVED |
+| US-163 | Parent views assessment results | US-155 | 15 | MOVED |
+| US-164 | Parent learning report | US-156 | 15 | MOVED |
+| US-165 | Audit logging | US-157 | 16 | MOVED |
+| US-166 | Security monitoring | US-158 | 16 | MOVED |
+| US-167 | Tenant-isolation verification | US-159 | 16 | MOVED |
+| US-168 | API observability | US-160 | 16 | MOVED |
+| US-169 | Application health monitoring | US-161 | 16 | MOVED |
+| US-170 | Error monitoring | US-162 | 16 | MOVED |
+| US-171 | Performance monitoring | US-163 | 16 | MOVED |
+| US-172 | Automated regression strategy | US-164 | 16 | MOVED |
+| US-173 | AI quality evaluation | — | — | RETIRED (dup) |
+| US-174 | Backup / recovery | US-165 | 16 | MOVED |
+| US-175 | Production deployment | US-166 | 16 | MOVED |
+| US-176 | Scalability readiness | US-166 | 16 | MERGED |
+| US-177 | Subscription plan management | — | — | RETIRED (dup) |
+| US-178 | Feature entitlement management | — | — | RETIRED (dup) |
+
+*(Draft 1.0 US-001–US-016 and US-017–US-026 retained their IDs unchanged; not re-listed here.)*
+
+---
+
+## SECTION G — PO DECISION / FREEZE CONTROL
+
+### G.1 Binding decisions incorporated
+
+The following ownership and scope decisions are now binding for implementation:
+
+1. **Epic 8** owns Phase 1 self-directed Practice → Attempt → Answer → Submit → Deterministic Evaluation → Result Persistence → Student Result Retrieval.
+2. **Epic 7** is the sole owner of Phase 2 homework/assignment submission, grading, and feedback.
+3. **Epic 9** owns Phase 2 formal/scheduled school assessments and their attempt/evaluation/result loop.
+4. **Epic 10** owns derived progress/mastery, not raw results.
+5. **Epic 11** owns learning-gap intelligence, distinct from Epic 10 mastery.
+6. **Epic 12** owns AI Teacher/personalization and future personalized practice generation targeting the Epic 8 practice model.
+7. **Epic 13** owns RAG/content intelligence and is future upstream; it must not block Epic 8 MVP.
+8. **Epic 15** consumes derived learning/assessment data and does not produce its own result source.
+9. **Epic 16** owns platform operations and tenant-isolation verification, including Epic 8 tables.
+10. Retired IDs are permanent and must never be reused.
+
+### G.2 Legacy PO reconciliation items — explicitly open, non-blocking
+
+These items existed in the earlier Draft 2.0 consolidation. They are **not silently resolved**. They do not block the current Epic 8 implementation path, but they must be resolved before implementing the affected scope:
+
+1. **Teacher Workspace** — seven Draft 1.0 stories have no dedicated Epic in the frozen framework. PO must eventually place, retire, or map them (candidate: Epic 15).
+2. **Epic 2 US-020 vs US-022** — overlapping academic/curriculum structure management; merge/re-scope decision remains open.
+3. **Epic 2 US-023 vs US-024** — overlapping curriculum-structure/subject association operation; merge/re-scope decision remains open.
+4. **Epic 2 US-017/US-018** — manage vs read-only scope for boards/mediums remains open.
+5. **Draft 1.0 US-030/US-035/US-036** — admin profile / active enrollment / enrollment history subsumption confirmation remains open.
+
+**Important:** These five items are legacy backlog-reconciliation decisions, not dependencies for Epic 8 Slice A/B/C. No implementation may invent a resolution without explicit PO approval.
+
+### G.3 Freeze status
+
+**IMPLEMENTATION BASELINE FROZEN.**
+
+The 16-Epic structure, US-001–US-166 numbering, ownership boundaries, retirements, Phase 1/2/Advanced boundaries, Epic 8 Practice/Result architecture, and implementation order are frozen. The five legacy items in G.2 remain tracked as explicit open PO decisions and must not be silently changed.
+
+---
+
+## SECTION H — IMPLEMENTATION CONTROL BASELINE
+
+### H.1 Implementation order
+
+| Step | Scope | Depends on |
+|---|---|---|
+| 1 | Epic 8 Practice & Result Foundation — Slice A + Slice B | — |
+| 2 | Epic 8 US-085 Result Retrieval — Slice C | Step 1 |
+| 3 | Epic 9 Phase 2 Formal Assessment | Independent of Epic 8; boundary already frozen |
+| 4 | Epic 10 Progress / Mastery | Epic 8 results; Epic 9 for US-101 |
+| 5 | Epic 11 Learning Gaps | Epic 10 |
+| 6 | Epic 12 AI Teacher / personalization | Epic 8; Epic 7 for US-125 |
+| 7 | Epic 13 RAG / content intelligence | Independent/future upstream |
+| 8 | Epic 14 AI economics / usage | Largely parallel |
+| 9 | Epic 15 Analytics / Parent | Epic 8 + Epic 9 + Epic 10 |
+| 10 | Epic 16 Platform hardening / operations | Continuous / parallel |
+
+### H.2 Epic 8 Practice foundation contract
+
+**Slice A — implemented and verified**
+- `practices` table: tenant-safe; required TOPIC association; required `practice_type` = PRACTICE/QUIZ/SELF_ASSESSMENT; lifecycle DRAFT/PUBLISHED/ARCHIVED.
+- `practice_questions` table: inline-owned; ordered by `sequence_number`; MVP question type MULTIPLE_CHOICE_SINGLE; structured options JSONB; server-side `correct_option_key`; marks; explanation; metadata.
+- Published/archived content is immutable for MVP.
+- Authoring routes are role-gated for SCHOOL_ADMIN, COACHING_ADMIN, and appropriately assigned TEACHER.
+- `organization_id` is server-derived; cross-tenant/topic access is rejected.
+- No separate `questions`, `options`, `ordering`, or `results` tables.
+
+**Slice B — next**
+- Add `practice_attempts` and `practice_attempt_answers`.
+- Start IN_PROGRESS attempt.
+- Save answers only for owner while IN_PROGRESS.
+- Never expose correct answers before submit.
+- Submit atomically; deterministic synchronous evaluation.
+- Persist score, max_score, percentage, correct_count, incorrect_count, unanswered_count on the attempt.
+- Submitted attempts immutable.
+
+**Slice C — next after Slice B**
+- US-085 read-only student result APIs.
+- Own-results-only, newest-first, tenant-safe.
+- Empty result state with no fabricated data.
+
+### H.3 API contract for Epic 8
+
+**Authoring implemented in Slice A:**
+`GET /api/practices`
+`POST /api/practices`
+`GET /api/practices/:practiceId`
+`PATCH /api/practices/:practiceId`
+`POST /api/practices/:practiceId/publish`
+`POST /api/practices/:practiceId/archive`
+`GET /api/practices/:practiceId/questions`
+`POST /api/practices/:practiceId/questions`
+`PATCH /api/practices/:practiceId/questions/:questionId`
+`DELETE /api/practices/:practiceId/questions/:questionId`
+
+**Planned Slice B/C student APIs:**
+`GET /api/student/practices`
+`GET /api/student/practices/:practiceId`
+`POST /api/student/practices/:practiceId/attempts`
+`PUT /api/student/attempts/:attemptId/answers`
+`POST /api/student/attempts/:attemptId/submit`
+`GET /api/student/attempts/:attemptId/result`
+`GET /api/student/results`
+
+### H.4 Database contract
+
+Four-table Phase 1 practice/result model:
+1. `practices`
+2. `practice_questions`
+3. `practice_attempts`
+4. `practice_attempt_answers`
+
+No separate `results` table is required for this MVP. The attempt stores its immutable result summary. Practices remain TOPIC-attached and do not require a `class_id`.
+
+### H.5 Security contract
+
+- Auth required.
+- Student identity server-derived from `students_v2.user_id`.
+- Client-supplied student identity must never override authenticated identity.
+- Organization is server-derived.
+- Active class enrollment required for student access where applicable.
+- Attempt ownership enforced on every read/write.
+- Cross-tenant and IDOR access rejected.
+- Correct answers never exposed pre-submit.
+- Submitted attempts immutable.
+- Published/archived practice content immutable for MVP.
+
+### H.6 Test / quality contract
+
+Required coverage includes authentication, identity override protection, organization isolation, active enrollment, valid TOPIC association, publication lifecycle, correct-answer non-leakage, attempt ownership, IDOR, cross-tenant rejection, answer mutation rules, deterministic evaluation, zero-max-score behavior, unanswered count, submitted immutability, historical newest-first retrieval, empty results, and practice/question content immutability.
+
+### H.7 Frontend contract
+
+Repository layout remains:
+```
+frontend/
+backend/
+```
+
+UI is developed in vertical slices alongside the APIs/tests:
+1. Practice discovery
+2. Practice detail/start
+3. Question/answer experience
+4. Submit/result
+5. Result history
+
+Frontend must not be placed inside `backend/`, and UI work should not wait for all backend epics to finish.
+
+### H.8 MVP exclusions
+
+The first Practice/Result implementation does not include essay/open-ended questions, multi-select, timer, negative marking, adaptive questioning, advanced question bank, teacher assessment, formal school assessment, parent results, mastery engine, AI-generated questions, full RAG ingestion, or complex multimodal assessment.
+
+### H.9 Cline verified implementation state — 2026-09-13
+
+**Epic 8 → Slice A — Practice & Question Definition Foundation: COMPLETE AND VERIFIED.**
+
+Implemented files:
+- `migrations/039_create_practices.sql`
+- `migrations/040_create_practice_questions.sql`
+- `src/modules/practice/types.ts`
+- `src/modules/practice/validation.ts`
+- `src/modules/practice/repository.ts`
+- `src/modules/practice/service.ts`
+- `src/modules/practice/routes.ts`
+- `tests/academic/phase039-practice-definition.test.ts`
+
+Modified:
+- `src/server.ts` — mounted `practiceRoutes`.
+
+Verification:
+- Migration 039 applied cleanly.
+- Migration 040 applied cleanly.
+- Focused Slice A tests: **27/27 passed**.
+- Full regression: **49 test files / 628 tests passed**.
+- TypeScript: `npx tsc --noEmit` → **exit 0**.
+- No pre-existing failures surfaced.
+- No Slice B, Slice C, or downstream Epic 9–16 implementation was claimed.
+
+### H.10 Final control rule
+
+**BACKLOG FROZEN FOR IMPLEMENTATION — NEXT TASK: EPIC 8 → SLICE B.**
+
+Future implementation findings that conflict with this baseline must be reported as deviations; they must not silently change story ownership, numbering, or scope.
+
+---
+
+*(Consolidated Master PO backlog and implementation-control baseline complete. All 178 Draft 1.0 stories remain accounted for through traceability; retired IDs are preserved; no new story IDs were invented; Epic 8 Slice A implementation evidence is incorporated; no silent renumbering or ownership changes are permitted.)*

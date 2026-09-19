@@ -305,6 +305,40 @@ describe("student practice discovery (GET /api/student/practices)", () => {
       expect(p).not.toHaveProperty("created_by_user_id");
     }
   });
+
+  it("auto-resolves the single active membership without X-Organization-Id", async () => {
+    const f = await studentFixture("disc-auto-single");
+    const { practiceId } = await seedPractice(f.organizationId, f.topicId, f.adminId, "PUBLISHED", QUESTIONS);
+
+    const res = await request(app).get("/api/student/practices").set("Authorization", `Bearer ${f.studentToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.practices[0].id).toBe(practiceId);
+    expect(res.body.practices[0].title).toBe("Mixed fractions");
+    expect(res.body.practices[0].topic.id).toBe(f.topicId);
+  });
+
+  it("fails closed with ORGANIZATION_REQUIRED for multiple active memberships without X-Organization-Id", async () => {
+    const f = await studentFixture("disc-auto-multi");
+    const other = await adminFixture("disc-auto-multi-other");
+    await addMember(f.studentUserId, other.organizationId, "STUDENT");
+
+    const res = await request(app).get("/api/student/practices").set("Authorization", `Bearer ${f.studentToken}`);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("ORGANIZATION_REQUIRED");
+    expect(res.body.error.message).toBe("Organization context is required.");
+  });
+
+  it("keeps auto-resolution isolated from cross-tenant practices", async () => {
+    const a = await studentFixture("disc-auto-a");
+    const b = await studentFixture("disc-auto-b");
+    await seedPractice(b.organizationId, b.topicId, b.adminId, "PUBLISHED", QUESTIONS);
+
+    const res = await request(app).get("/api/student/practices").set("Authorization", `Bearer ${a.studentToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.practices).toEqual([]);
+    expect(res.body.total).toBe(0);
+  });
 });
 
 describe("student practice detail (GET /api/student/practices/:practiceId)", () => {

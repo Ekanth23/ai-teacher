@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Breadcrumb } from "../components/Breadcrumb";
 import { Container } from "../components/Container";
 import { EmptyState } from "../components/EmptyState";
@@ -10,8 +10,18 @@ import { Card, CardContent } from "../components/ui/Card";
 import { Skeleton, SkeletonCard } from "../components/ui/Skeleton";
 import { ApiError } from "../services/api/errors";
 import { getDashboard } from "../services/api/dashboard";
-import { getChapter, getClasses, getClassSubjects } from "../services/api/learning";
-import type { Chapter, StudentClassSummary, SubjectSummary } from "../types/learning";
+import {
+  getChapter,
+  getChapterTopics,
+  getClasses,
+  getClassSubjects,
+} from "../services/api/learning";
+import type {
+  Chapter,
+  StudentClassSummary,
+  SubjectSummary,
+  Topic,
+} from "../types/learning";
 
 type ChapterDetailState =
   | { status: "loading" }
@@ -20,6 +30,7 @@ type ChapterDetailState =
       classContext: StudentClassSummary;
       subject: SubjectSummary;
       chapter: Chapter;
+      topics: Topic[];
     }
   | { status: "unavailable"; title: string; description: string }
   | { status: "error"; message: string };
@@ -102,7 +113,15 @@ export default function ChapterDetailPage() {
         return;
       }
 
-      setState({ status: "success", classContext, subject, chapter });
+      const topicData = await getChapterTopics(chapterId);
+
+      setState({
+        status: "success",
+        classContext,
+        subject,
+        chapter,
+        topics: topicData.topics,
+      });
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
         setState({
@@ -154,7 +173,7 @@ export default function ChapterDetailPage() {
     );
   }
 
-  const { classContext, subject, chapter } = state;
+  const { classContext, subject, chapter, topics } = state;
 
   return (
     <Container className="py-8">
@@ -179,6 +198,42 @@ export default function ChapterDetailPage() {
             ) : null}
           </CardContent>
         </Card>
+        <section aria-labelledby="topics-heading">
+          <h2 id="topics-heading" className="section-title">
+            Topics
+          </h2>
+          <div className="mt-3">
+            {topics.length === 0 ? (
+              <EmptyState
+                title="No topics yet"
+                description="Topics for this chapter will appear here once they're available."
+              />
+            ) : (
+              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {topics.map((topic) => (
+                  <li key={topic.id}>
+                    <Link
+                      to={`/learning/${classContext.id}/subjects/${subject.id}/chapters/${chapter.id}/topics/${topic.id}`}
+                      className="block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                    >
+                      <Card className="h-full transition-colors hover:border-primary-300">
+                        <CardContent>
+                          <h3 className="card-title">{topic.title}</h3>
+                          {topic.code ? (
+                            <p className="caption mt-1">{topic.code}</p>
+                          ) : null}
+                          {topic.description ? (
+                            <p className="secondary mt-2">{topic.description}</p>
+                          ) : null}
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
       </div>
     </Container>
   );
@@ -193,6 +248,14 @@ function ChapterDetailSkeleton() {
         <Skeleton className="h-4 w-40 max-w-full" />
       </div>
       <SkeletonCard />
+      <div className="space-y-3">
+        <Skeleton className="h-6 w-32" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,8 @@
-import type { DashboardClass, DashboardSubject } from "./dashboard";
+import type {
+  DashboardClass,
+  DashboardSubject,
+  LearningResource,
+} from "./dashboard";
 
 /**
  * A student's active enrolled class. Reuses the exact class shape already
@@ -51,4 +55,29 @@ export interface StructureChaptersResponse {
 /** GET /api/curriculum/chapters/:chapterId */
 export interface ChapterResponse {
   chapter: Chapter;
+}
+
+/**
+ * A topic within a chapter. Topics and chapters are both curriculum nodes and
+ * share the same shape, so the chapter node type is reused.
+ */
+export type Topic = Chapter;
+
+/** GET /api/curriculum/chapters/:chapterId/topics */
+export interface ChapterTopicsResponse {
+  topics: Topic[];
+  total: number;
+}
+
+/**
+ * GET /api/organizations/:organizationId/learning-resources?curriculum_node_id=…
+ *
+ * Reuses the dashboard's student-facing `LearningResource` shape. The list
+ * endpoint applies the full student visibility model (PUBLISHED status,
+ * visibility, class membership, tenant isolation), so only the safe fields are
+ * modeled here.
+ */
+export interface LearningResourcesResponse {
+  learningResources: LearningResource[];
+  total: number;
 }

@@ -17,7 +17,7 @@ const notFound = (name: string) => {
 // Student identity is always derived from the authenticated user -> students_v2
 // relationship. A client-supplied student_id is never trusted.
 async function requireStudent(req: Request, user: AuthenticatedUser) {
-  const context = await resolveOrganizationContext(req, user);
+  const context = await resolveOrganizationContext(req, user, null, { autoResolveSingle: true });
   if (context.role.name !== "STUDENT") {
     throw new AuthorizationError("ROLE_REQUIRED", "Student access required.");
   }

@@ -5,16 +5,23 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ChapterDetailPage from "../pages/ChapterDetailPage";
 import { getDashboard } from "../services/api/dashboard";
 import { ApiError } from "../services/api/errors";
-import { getChapter, getClasses, getClassSubjects } from "../services/api/learning";
+import {
+  getChapter,
+  getChapterTopics,
+  getClasses,
+  getClassSubjects,
+} from "../services/api/learning";
 import type { DashboardResponse } from "../types/dashboard";
 import type {
   ChapterResponse,
+  ChapterTopicsResponse,
   ClassListResponse,
   ClassSubjectsResponse,
 } from "../types/learning";
 
 vi.mock("../services/api/learning", () => ({
   getChapter: vi.fn(),
+  getChapterTopics: vi.fn(),
   getClasses: vi.fn(),
   getClassSubjects: vi.fn(),
 }));
@@ -24,6 +31,7 @@ vi.mock("../services/api/dashboard", () => ({
 }));
 
 const mockedGetChapter = vi.mocked(getChapter);
+const mockedGetChapterTopics = vi.mocked(getChapterTopics);
 const mockedGetClasses = vi.mocked(getClasses);
 const mockedGetClassSubjects = vi.mocked(getClassSubjects);
 const mockedGetDashboard = vi.mocked(getDashboard);
@@ -71,11 +79,35 @@ const chapterFixture: ChapterResponse = {
   },
 };
 
+const topicsFixture: ChapterTopicsResponse = {
+  topics: [
+    {
+      id: "topic-1",
+      curriculum_structure_id: "structure-1",
+      parent_node_id: "chapter-1",
+      node_type_id: "topic-type-1",
+      node_type_code: "TOPIC",
+      node_type_name: "Topic",
+      subject_id: "subject-1",
+      title: "Integers",
+      code: "T-1",
+      description: "Operations on integers.",
+      sequence_number: 1,
+      metadata: {},
+      status: "ACTIVE",
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    },
+  ],
+  total: 1,
+};
+
 function mockChapterContext() {
   mockedGetClasses.mockResolvedValue(classesFixture);
   mockedGetClassSubjects.mockResolvedValue(subjectsFixture);
   mockedGetDashboard.mockResolvedValue(dashboardFixture);
   mockedGetChapter.mockResolvedValue(chapterFixture);
+  mockedGetChapterTopics.mockResolvedValue(topicsFixture);
 }
 
 function renderPage(
@@ -121,6 +153,59 @@ describe("Chapter Detail (ChapterDetailPage)", () => {
       "/learning/class-1/subjects/subject-1",
     );
     expect(screen.getByText("Number Systems", { selector: "[aria-current=page]" })).toBeInTheDocument();
+  });
+
+  it("renders the real topics belonging to the authorized chapter", async () => {
+    mockChapterContext();
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Topics" })).toBeInTheDocument();
+    expect(mockedGetChapterTopics).toHaveBeenCalledWith("chapter-1");
+    expect(screen.getByRole("heading", { name: "Integers" })).toBeInTheDocument();
+    expect(screen.getByText("T-1")).toBeInTheDocument();
+    expect(screen.getByText("Operations on integers.")).toBeInTheDocument();
+  });
+
+  it("links each topic to its learning-resource topic page", async () => {
+    mockChapterContext();
+    renderPage();
+
+    const link = await screen.findByRole("link", { name: /Integers/ });
+    expect(link).toHaveAttribute(
+      "href",
+      "/learning/class-1/subjects/subject-1/chapters/chapter-1/topics/topic-1",
+    );
+  });
+
+  it("shows an empty state when the chapter has no topics", async () => {
+    mockChapterContext();
+    mockedGetChapterTopics.mockResolvedValue({ topics: [], total: 0 });
+    renderPage();
+
+    expect(await screen.findByText("No topics yet")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Integers" })).not.toBeInTheDocument();
+  });
+
+  it("shows an API error and retries the topics request", async () => {
+    const user = userEvent.setup();
+    mockChapterContext();
+    mockedGetChapterTopics
+      .mockRejectedValueOnce(new ApiError("NETWORK_ERROR", "Unable to reach the server.", 0))
+      .mockResolvedValueOnce(topicsFixture);
+    renderPage();
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /try again/i }));
+    expect(await screen.findByRole("heading", { name: "Integers" })).toBeInTheDocument();
+  });
+
+  it("does not request topics when the chapter is unavailable", async () => {
+    mockChapterContext();
+    mockedGetChapter.mockRejectedValue(new ApiError("NOT_FOUND", "Chapter was not found.", 404));
+    renderPage();
+
+    expect(await screen.findByText("Chapter not found")).toBeInTheDocument();
+    expect(mockedGetChapterTopics).not.toHaveBeenCalled();
   });
 
   it("shows a loading status while fetching", () => {
@@ -171,6 +256,7 @@ describe("Chapter Detail (ChapterDetailPage)", () => {
 
     expect(await screen.findByText("Class not found")).toBeInTheDocument();
     expect(mockedGetChapter).not.toHaveBeenCalled();
+    expect(mockedGetChapterTopics).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid subject context without requesting chapter data", async () => {
@@ -180,6 +266,7 @@ describe("Chapter Detail (ChapterDetailPage)", () => {
 
     expect(await screen.findByText("Subject not found")).toBeInTheDocument();
     expect(mockedGetChapter).not.toHaveBeenCalled();
+    expect(mockedGetChapterTopics).not.toHaveBeenCalled();
   });
 
   it("shows an unavailable state when the subject has no matching structure", async () => {
@@ -192,6 +279,7 @@ describe("Chapter Detail (ChapterDetailPage)", () => {
 
     expect(await screen.findByText("Chapter not available")).toBeInTheDocument();
     expect(mockedGetChapter).not.toHaveBeenCalled();
+    expect(mockedGetChapterTopics).not.toHaveBeenCalled();
   });
 
   it("does not select a chapter structure when more than one matches", async () => {
@@ -207,6 +295,7 @@ describe("Chapter Detail (ChapterDetailPage)", () => {
 
     expect(await screen.findByText("Chapter unavailable")).toBeInTheDocument();
     expect(mockedGetChapter).not.toHaveBeenCalled();
+    expect(mockedGetChapterTopics).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -222,5 +311,6 @@ describe("Chapter Detail (ChapterDetailPage)", () => {
 
     expect(await screen.findByText("Chapter not available")).toBeInTheDocument();
     expect(screen.queryByText("Learn about real numbers.")).not.toBeInTheDocument();
+    expect(mockedGetChapterTopics).not.toHaveBeenCalled();
   });
 });
