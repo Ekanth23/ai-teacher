@@ -355,6 +355,8 @@ describe("ai.service provider abstraction integration", () => {
     expect(capturedPrompt).toContain("STUDENT: Hello");
     expect(capturedPrompt).toContain("ASSISTANT: Hi there!");
     expect(capturedPrompt).toContain("Previous conversation");
+    expect(capturedPrompt).toContain("curriculum-specific answer");
+    expect(capturedPrompt).toContain("unrelated to learning");
     expect(capturedPrompt).toBe(capturedPrompt.trim());
   });
 
@@ -398,5 +400,27 @@ describe("ai.service provider abstraction integration", () => {
     expect(event?.status).toBe("FAILURE");
     expect(typeof event?.latencyMs).toBe("number");
     expect(event?.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("rejects whitespace-only provider responses instead of persisting an empty success", async () => {
+    const tracker = new InMemoryUsageTracker();
+    const whitespaceProvider: LlmProviderWithMetadata = {
+      generate: async () => "   ",
+      generateWithMetadata: async () => ({
+        text: "   ",
+        metadata: {
+          provider: "mock",
+          model: "mock-model",
+          status: "SUCCESS",
+          usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 },
+        },
+      }),
+    };
+
+    await expect(
+      generateTutorReply(BASE_INPUT, { provider: whitespaceProvider, usageTracker: tracker })
+    ).rejects.toThrow();
+    expect(tracker.getEvents()).toHaveLength(1);
+    expect(tracker.getEvents()[0]?.status).toBe("FAILURE");
   });
 });

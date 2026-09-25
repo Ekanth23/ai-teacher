@@ -10,8 +10,9 @@ import type { UsageTracker } from "./usage.tracker.js";
 export class InMemoryUsageTracker implements UsageTracker {
   private readonly events: LlmUsageEvent[] = [];
 
-  async recordUsage(event: LlmUsageEvent): Promise<void> {
+  async recordUsage(event: LlmUsageEvent): Promise<LlmUsageEvent> {
     this.events.push(event);
+    return event;
   }
 
   getEvents(): readonly LlmUsageEvent[] {

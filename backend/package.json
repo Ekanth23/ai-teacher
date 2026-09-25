@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "test": "vitest run",
+    "db:preflight:ai": "node scripts/ai-conversation-ownership-preflight.js",
     "db:seed:dev": "tsx scripts/seed-dev-student.ts",
     "db:seed:curriculum:tn-std8-maths": "tsx scripts/seed-curriculum-tn-std8-maths.ts"
   },

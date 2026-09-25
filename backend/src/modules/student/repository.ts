@@ -41,10 +41,12 @@ export const listSubjectsForClass = (organizationId: string, classId: string) =>
 // Recent AI conversations for a student (continue-learning trail), student-scoped.
 export const listRecentConversationsForStudent = (organizationId: string, studentId: string, limit: number) =>
   pool.query(
-    `SELECT id, subject, topic, updated_at
+    `SELECT id, title, subject, topic, scope_board, scope_class, scope_chapter,
+            scope_language, scope_medium, updated_at
      FROM ai_conversations
      WHERE organization_id = $1 AND student_id = $2
-     ORDER BY updated_at DESC
+       AND deleted_at IS NULL
+     ORDER BY updated_at DESC, id DESC
      LIMIT $3`,
     [organizationId, studentId, limit]
   );

@@ -18,9 +18,14 @@ describe("ai.routes database schema reconciliation", () => {
     );
   }
 
-  it("uses the canonical students_v2 table for student lookup", async () => {
+  it("uses the canonical students_v2 repository relationship for student lookup", async () => {
     const source = await loadRouteSource();
-    expect(source).toContain("FROM students_v2");
+    const repositorySource = await readFile(
+      new URL("../../src/modules/student/repository.ts", import.meta.url),
+      "utf-8"
+    );
+    expect(source).toContain("getStudentByUser");
+    expect(repositorySource).toContain("FROM students_v2");
     expect(source).not.toContain("FROM students\n");
     expect(source).not.toContain("FROM students ");
     expect(source).not.toContain("FROM student_profiles");
@@ -28,8 +33,13 @@ describe("ai.routes database schema reconciliation", () => {
 
   it("maps student name/grade fields to students_v2 columns", async () => {
     const source = await loadRouteSource();
-    expect(source).toContain("full_name AS name");
-    expect(source).toContain("grade_level AS grade");
+    const repositorySource = await readFile(
+      new URL("../../src/modules/student/repository.ts", import.meta.url),
+      "utf-8"
+    );
+    expect(repositorySource).toContain("full_name");
+    expect(repositorySource).toContain("grade_level");
+    expect(source).toContain("studentGrade: student.grade_level");
   });
 
   it("uses the canonical ai_conversations table with id/organization_id/student_id/subject/topic", async () => {
@@ -74,21 +84,23 @@ describe("ai.routes authentication and tenant scoping", () => {
     expect(source).toContain("requireAuth");
   });
 
-  it("derives organization scope from the conversation record", async () => {
+  it("derives organization scope from the authenticated request context", async () => {
     const source = await loadRouteSource();
-    expect(source).toContain("resolveOrganizationContext(req, user, conversation.organization_id)");
+    expect(source).toContain("const { context, student } = await requireStudent(req, user)");
+    expect(source).toContain("resolveOrganizationContext(req, user, null, { autoResolveSingle: true })");
+    expect(source).not.toContain("resolveOrganizationContext(req, user, conversation.organization_id)");
   });
 
-  it("scopes the student lookup to the conversation's organization", async () => {
+  it("scopes the conversation lookup to the authenticated organization and student", async () => {
     const source = await loadRouteSource();
-    expect(source).toContain("FROM students_v2");
-    expect(source).toContain("WHERE id = $1 AND organization_id = $2");
+    expect(source).toContain("WHERE id = $1 AND organization_id = $2 AND student_id = $3");
+    expect(source).toContain("[conversation_id, context.organization.id, student.id]");
   });
 
-  it("passes userId and organizationId into the LLM request context", async () => {
+  it("passes authenticated user and organization into the LLM request context", async () => {
     const source = await loadRouteSource();
     expect(source).toContain("userId: user.id");
-    expect(source).toContain("organizationId: conversation.organization_id");
+    expect(source).toContain("organizationId: context.organization.id");
   });
 
   it("maps AuthorizationError to a 403 response", async () => {

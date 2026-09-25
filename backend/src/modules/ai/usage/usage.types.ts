@@ -3,12 +3,16 @@ import type { LlmModelIdentity, LlmRequestContext, LlmTokenUsage } from "../prov
 export type UsageEventStatus = "SUCCESS" | "FAILURE";
 
 export interface LlmUsageEvent extends LlmModelIdentity {
+  /** Present when a persistent tracker assigns the usage row identity. */
+  id?: string;
   requestId?: string;
   feature?: string;
   organizationId?: string;
   studentId?: string;
   userId?: string;
   conversationId?: string;
+  /** Present only for a generation attempt; omitted for legacy callers. */
+  generationAttemptId?: string;
   usage?: LlmTokenUsage;
   latencyMs?: number;
   estimatedCost?: number;
@@ -29,7 +33,7 @@ export type CreateUsageEventInput = {
 };
 
 export function createUsageEvent(input: CreateUsageEventInput): LlmUsageEvent {
-  return {
+  const event: LlmUsageEvent = {
     provider: input.provider,
     model: input.model,
     requestId: input.context?.requestId,
@@ -45,4 +49,12 @@ export function createUsageEvent(input: CreateUsageEventInput): LlmUsageEvent {
     errorCategory: input.errorCategory,
     timestamp: new Date().toISOString(),
   };
+
+  // Keep the legacy usage-event shape stable for callers that do not use the
+  // US-117 attempt linkage.
+  if (input.context?.generationAttemptId) {
+    event.generationAttemptId = input.context.generationAttemptId;
+  }
+
+  return event;
 }

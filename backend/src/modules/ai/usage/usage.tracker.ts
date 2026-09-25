@@ -7,5 +7,10 @@ import type { LlmUsageEvent } from "./usage.types.js";
  * later. No persistence is performed in this test.
  */
 export interface UsageTracker {
-  recordUsage(event: LlmUsageEvent): Promise<void>;
+  /**
+   * Records one actual provider generation. Implementations may return the
+   * persisted event (including its database id); the original void contract
+   * remains valid for lightweight/test trackers.
+   */
+  recordUsage(event: LlmUsageEvent): Promise<LlmUsageEvent | void>;
 }

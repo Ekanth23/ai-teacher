@@ -109,9 +109,13 @@ describe("PostgresUsageTracker", () => {
     });
 
     const migrationCheck = await pool.query(
-      `SELECT COUNT(*)::int AS row_count FROM schema_migrations WHERE version = '025_create_ai_usage_events'`
+      `SELECT version, COUNT(*)::int AS row_count
+         FROM schema_migrations
+        WHERE version IN ('025_create_ai_usage_events', '046_create_ai_conversation_foundation', '047_reconcile_ai_conversation_remediation')
+        GROUP BY version`
     );
-    expect(migrationCheck.rows[0].row_count).toBeGreaterThan(0);
+    expect(migrationCheck.rows).toHaveLength(3);
+    expect(migrationCheck.rows.every((row) => row.row_count === 1)).toBe(true);
   });
 
   it("persists a full success event with tenant, token, latency, and cost fields", async () => {

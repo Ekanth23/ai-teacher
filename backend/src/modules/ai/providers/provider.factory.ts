@@ -42,6 +42,20 @@ export function resolveAiProviderName(providerName?: string): AiProviderName {
   return normalizeProviderName(providerName ?? process.env.AI_PROVIDER);
 }
 
+/**
+ * Returns a safe persistence label even when deployment configuration is
+ * invalid. The durable conversation lifecycle must be able to record a
+ * failed attempt instead of losing the student's request while reporting a
+ * configuration error.
+ */
+export function resolveAiProviderNameOrUnknown(providerName?: string): string {
+  try {
+    return resolveAiProviderName(providerName);
+  } catch {
+    return "unknown";
+  }
+}
+
 export function createLlmProvider(providerName?: string): LlmProvider {
   const provider = resolveAiProviderName(providerName);
 

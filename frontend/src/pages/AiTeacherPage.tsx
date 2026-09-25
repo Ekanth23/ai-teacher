@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Container } from "../components/Container";
 import { EmptyState } from "../components/EmptyState";
@@ -20,10 +20,11 @@ export const SUGGESTED_PROMPTS = [
 ];
 
 function conversationTitle(conversation: AiConversation): string {
+  if (conversation.title?.trim()) return conversation.title;
   const parts = [conversation.subject, conversation.topic].filter(
     (part): part is string => part !== null && part !== "",
   );
-  return parts.length > 0 ? parts.join(" · ") : "General conversation";
+  return parts.length > 0 ? parts.join(" · ") : "New Conversation";
 }
 
 function formatUpdatedAt(value: string | undefined): string | null {
@@ -31,6 +32,22 @@ function formatUpdatedAt(value: string | undefined): string | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleString();
+}
+
+function createIdempotencyKey(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `ai-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function conversationScopeLabel(conversation: AiConversation): string | null {
+  const scope = conversation.scope;
+  const parts = scope
+    ? [scope.board, scope.class, scope.subject, scope.chapter, scope.topic]
+    : [conversation.subject, conversation.topic];
+  const label = parts
+    .filter((part): part is string => typeof part === "string" && part.trim() !== "")
+    .join(" · ");
+  return label || null;
 }
 
 type HistoryState =
@@ -53,13 +70,34 @@ export default function AiTeacherPage() {
   const [history, setHistory] = useState<HistoryState>({ status: "loading" });
   const [question, setQuestion] = useState("");
   const [start, setStart] = useState<StartState>({ status: "idle" });
+  const historySequenceRef = useRef(0);
+  const historyAbortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+  const startPendingRef = useRef(false);
+  const startKeyRef = useRef(new Map<string, string>());
 
   const loadHistory = useCallback(async () => {
+    const sequence = ++historySequenceRef.current;
+    historyAbortRef.current?.abort();
+    const controller = new AbortController();
+    historyAbortRef.current = controller;
     setHistory({ status: "loading" });
     try {
-      const data = await getConversations();
+      const data = await getConversations({ signal: controller.signal });
+      if (!mountedRef.current || sequence !== historySequenceRef.current) return;
       setHistory({ status: "success", conversations: data.conversations });
     } catch (error) {
+      if (
+        !mountedRef.current ||
+        sequence !== historySequenceRef.current ||
+        (typeof error === "object" &&
+          error !== null &&
+          "name" in error &&
+          ((error as { name?: unknown }).name === "AbortError" ||
+            (error as { message?: unknown }).message === "AbortError"))
+      ) {
+        return;
+      }
       setHistory({
         status: "error",
         message:
@@ -71,28 +109,67 @@ export default function AiTeacherPage() {
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     void loadHistory();
+    return () => {
+      mountedRef.current = false;
+      historySequenceRef.current += 1;
+      historyAbortRef.current?.abort();
+    };
   }, [loadHistory]);
 
   const handleStart = useCallback(
     async (firstQuestion: string) => {
-      if (start.status === "starting") return;
+      if (start.status === "starting" || startPendingRef.current) return;
       const trimmed = firstQuestion.trim();
       if (!trimmed) return;
+      const key = `start:${trimmed}:${contextSubject}:${contextTopic}`;
+      const idempotencyKey = startKeyRef.current.get(key) ?? createIdempotencyKey();
+      startKeyRef.current.set(key, idempotencyKey);
+      startPendingRef.current = true;
       setStart({ status: "starting" });
       try {
         const data = await createConversation(
-          hasContext
-            ? {
-                ...(contextSubject ? { subject: contextSubject } : {}),
-                ...(contextTopic ? { topic: contextTopic } : {}),
-              }
-            : {},
+          {
+            question: trimmed,
+            ...(hasContext
+              ? {
+                  ...(contextSubject ? { subject: contextSubject } : {}),
+                  ...(contextTopic ? { topic: contextTopic } : {}),
+                }
+              : {}),
+          },
+          { idempotencyKey },
         );
-        navigate(`/ai-teacher/${data.conversation.id}`, {
-          state: { initialQuestion: trimmed },
-        });
+        if (!mountedRef.current) return;
+        startPendingRef.current = false;
+        startKeyRef.current.delete(key);
+        navigate(`/ai-teacher/${data.conversation.id}`);
       } catch (error) {
+        if (!mountedRef.current) return;
+        startPendingRef.current = false;
+        const details =
+          error instanceof ApiError && typeof error.details === "object" && error.details !== null
+            ? (error.details as {
+                conversation?: { id?: string };
+                error?: { conversation?: { id?: string } };
+              })
+            : undefined;
+        const persistedConversationId =
+          details?.conversation?.id ?? details?.error?.conversation?.id;
+        if (persistedConversationId) {
+          startKeyRef.current.delete(key);
+          // A provider failure still persists the student's request. Open that
+          // conversation so the durable retry action is available instead of
+          // creating a second conversation on the next click.
+          navigate(`/ai-teacher/${persistedConversationId}`);
+          return;
+        }
+        const unknownOutcome =
+          !(error instanceof ApiError) ||
+          error.status === 0 ||
+          error.code === "NETWORK_ERROR";
+        if (!unknownOutcome) startKeyRef.current.delete(key);
         setStart({
           status: "error",
           message:
@@ -134,6 +211,7 @@ export default function AiTeacherPage() {
               id="ai-teacher-question"
               rows={3}
               value={question}
+              maxLength={20_000}
               onChange={(event) => setQuestion(event.target.value)}
               placeholder="Type your question here…"
               className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
@@ -142,7 +220,7 @@ export default function AiTeacherPage() {
               <Button
                 variant="primary"
                 loading={start.status === "starting"}
-                disabled={question.trim() === ""}
+                disabled={question.trim() === "" || start.status === "starting"}
                 onClick={() => void handleStart(question)}
               >
                 Ask AI Teacher
@@ -209,6 +287,7 @@ export default function AiTeacherPage() {
               <ul className="space-y-3">
                 {history.conversations.map((conversation) => {
                   const updated = formatUpdatedAt(conversation.updated_at);
+                  const scope = conversationScopeLabel(conversation);
                   return (
                     <li key={conversation.id}>
                       <Link
@@ -220,6 +299,12 @@ export default function AiTeacherPage() {
                             <h3 className="card-title">
                               {conversationTitle(conversation)}
                             </h3>
+                            {scope ? <p className="caption mt-1">{scope}</p> : null}
+                            {conversation.latest_message_preview ? (
+                              <p className="secondary mt-1 line-clamp-2">
+                                {conversation.latest_message_preview}
+                              </p>
+                            ) : null}
                             {updated ? (
                               <p className="caption mt-1">{updated}</p>
                             ) : null}

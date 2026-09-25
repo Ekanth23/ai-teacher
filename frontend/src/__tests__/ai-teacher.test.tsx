@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import AiTeacherPage from "../pages/AiTeacherPage";
@@ -85,8 +85,8 @@ describe("AI Teacher landing (AiTeacherPage)", () => {
     expect(
       await screen.findByRole("heading", { name: "Recent conversations" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Maths · Fractions")).toBeInTheDocument();
-    expect(screen.getByText("General conversation")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Maths · Fractions" })).toBeInTheDocument();
+    expect(screen.getByText("New Conversation")).toBeInTheDocument();
   });
 
   it("shows a loading state while fetching history", () => {
@@ -141,10 +141,13 @@ describe("AI Teacher landing (AiTeacherPage)", () => {
     await user.click(screen.getByRole("button", { name: "Ask AI Teacher" }));
 
     expect(mockedCreateConversation).toHaveBeenCalledTimes(1);
-    expect(mockedCreateConversation).toHaveBeenCalledWith({});
-    expect(mockedNavigate).toHaveBeenCalledWith("/ai-teacher/conv-9", {
-      state: { initialQuestion: "What is 2 + 2?" },
-    });
+    expect(mockedCreateConversation).toHaveBeenCalledWith(
+      {
+        question: "What is 2 + 2?",
+      },
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+    expect(mockedNavigate).toHaveBeenCalledWith("/ai-teacher/conv-9");
   });
 
   it("blocks empty questions and duplicate starts", async () => {
@@ -176,10 +179,66 @@ describe("AI Teacher landing (AiTeacherPage)", () => {
     );
     await user.click(screen.getByRole("button", { name: "Ask AI Teacher" }));
 
-    expect(mockedCreateConversation).toHaveBeenCalledWith({
-      subject: "Maths",
-      topic: "Fractions",
-    });
+    expect(mockedCreateConversation).toHaveBeenCalledWith(
+      {
+        question: "Help?",
+        subject: "Maths",
+        topic: "Fractions",
+      },
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+  });
+
+  it("opens a persisted failed conversation when the first generation fails", async () => {
+    const user = userEvent.setup();
+    mockedCreateConversation.mockRejectedValue(
+      new ApiError(
+        "REQUEST_FAILED",
+        "We couldn't generate an AI Teacher response. Please try again.",
+        502,
+        {
+          conversation: { id: "conv-failed" },
+          student_message: { id: "message-failed" },
+          attempt: { id: "attempt-failed" },
+        },
+      ),
+    );
+    renderPage();
+    await screen.findByRole("heading", { name: "Recent conversations" });
+
+    await user.type(screen.getByLabelText(/What would you like help with/), "Hi");
+    await user.click(screen.getByRole("button", { name: "Ask AI Teacher" }));
+
+    expect(mockedNavigate).toHaveBeenCalledWith("/ai-teacher/conv-failed");
+  });
+
+  it("reuses the same idempotency key after an unknown start outcome", async () => {
+    const user = userEvent.setup();
+    mockedCreateConversation
+      .mockRejectedValueOnce(new ApiError("NETWORK_ERROR", "Connection lost.", 0))
+      .mockResolvedValueOnce({
+        status: "success",
+        message: "Conversation created successfully",
+        conversation: {
+          id: "conv-retry",
+          subject: null,
+          topic: null,
+          created_at: "2026-09-18T00:00:00.000Z",
+        },
+      });
+    renderPage();
+    await screen.findByRole("heading", { name: "Recent conversations" });
+
+    await user.type(screen.getByLabelText(/What would you like help with/), "Retry me");
+    await user.click(screen.getByRole("button", { name: "Ask AI Teacher" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Connection lost.");
+    await user.click(screen.getByRole("button", { name: "Ask AI Teacher" }));
+
+    await waitFor(() => expect(mockedNavigate).toHaveBeenCalledWith("/ai-teacher/conv-retry"));
+    const firstKey = (mockedCreateConversation.mock.calls[0]?.[1] as { idempotencyKey?: string } | undefined)?.idempotencyKey;
+    const secondKey = (mockedCreateConversation.mock.calls[1]?.[1] as { idempotencyKey?: string } | undefined)?.idempotencyKey;
+    expect(firstKey).toEqual(expect.any(String));
+    expect(secondKey).toBe(firstKey);
   });
 
   it("shows an inline error when starting fails", async () => {

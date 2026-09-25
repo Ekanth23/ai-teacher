@@ -1,7 +1,8 @@
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import pool from "../../src/db.js";
 import { createAccessToken } from "../../src/auth/tokens.js";
+import { MockLlmProvider } from "../../src/modules/ai/providers/mock.provider.js";
 import { createApp } from "../../src/server.js";
 
 process.env.JWT_ACCESS_SECRET ??= "test-jwt-secret";
@@ -42,7 +43,10 @@ async function cleanup() {
   });
 }
 
-afterEach(cleanup);
+afterEach(async () => {
+  await cleanup();
+  vi.restoreAllMocks();
+});
 
 async function createUser(label: string) {
   const result = await pool.query(
@@ -320,6 +324,93 @@ describe("GET /api/ai/conversations", () => {
       .set(auth(b.studentToken, b.organizationId));
     expect(res.status).toBe(200);
     expect(res.body.conversations).toEqual([]);
+  });
+});
+
+describe("POST /api/ai/reply security containment", () => {
+  it("rejects unauthenticated replies without persisting or generating", async () => {
+    const f = await studentFixture("reply-unauthenticated");
+    const conversationId = await createConversation(f);
+    const providerSpy = vi.spyOn(MockLlmProvider.prototype, "generateWithMetadata");
+
+    const res = await request(app)
+      .post("/api/ai/reply")
+      .send({ conversation_id: conversationId, question: "Can you help me?" });
+
+    expect(res.status).toBe(401);
+    const messages = await pool.query("SELECT id FROM ai_messages WHERE conversation_id = $1", [conversationId]);
+    expect(messages.rows).toHaveLength(0);
+    expect(providerSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects teacher, parent, and administrator roles without persisting or generating", async () => {
+    const f = await studentFixture("reply-roles");
+    const conversationId = await createConversation(f);
+    const roleMembers: Array<{ label: string; token: string }> = [];
+
+    for (const [label, roleName] of [
+      ["teacher", "TEACHER"],
+      ["parent", "PARENT"],
+    ] as const) {
+      const userId = await createUser(`reply-${label}`);
+      await addMember(userId, f.organizationId, roleName);
+      roleMembers.push({ label, token: createAccessToken(userId) });
+    }
+    roleMembers.push({ label: "admin", token: f.adminToken });
+
+    const providerSpy = vi.spyOn(MockLlmProvider.prototype, "generateWithMetadata");
+    const responses = [];
+    for (const member of roleMembers) {
+      responses.push(
+        await request(app)
+          .post("/api/ai/reply")
+          .set(auth(member.token, f.organizationId))
+          .send({ conversation_id: conversationId, question: `Can ${member.label} use this?` })
+      );
+    }
+    expect(responses.map((response) => response.status)).toEqual([403, 403, 403]);
+
+    const messages = await pool.query("SELECT id FROM ai_messages WHERE conversation_id = $1", [conversationId]);
+    expect(messages.rows).toHaveLength(0);
+    expect(providerSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for another student's conversation in the same organization", async () => {
+    const f = await studentFixture("reply-idor");
+    const conversationId = await createConversation(f);
+    const otherUserId = await createUser("reply-idor-intruder");
+    await addMember(otherUserId, f.organizationId, "STUDENT");
+    await createStudent(f.organizationId, otherUserId, "Reply Intruder");
+    const providerSpy = vi.spyOn(MockLlmProvider.prototype, "generateWithMetadata");
+
+    const res = await request(app)
+      .post("/api/ai/reply")
+      .set(auth(createAccessToken(otherUserId), f.organizationId))
+      .send({ conversation_id: conversationId, question: "Can I read this?" });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ status: "error", message: "Conversation not found" });
+    const messages = await pool.query("SELECT id FROM ai_messages WHERE conversation_id = $1", [conversationId]);
+    expect(messages.rows).toHaveLength(0);
+    expect(providerSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for a conversation owned by another organization", async () => {
+    const owner = await studentFixture("reply-tenant-owner");
+    const otherTenant = await studentFixture("reply-tenant-other");
+    const conversationId = await createConversation(owner);
+    const providerSpy = vi.spyOn(MockLlmProvider.prototype, "generateWithMetadata");
+
+    const res = await request(app)
+      .post("/api/ai/reply")
+      .set(auth(otherTenant.studentToken, otherTenant.organizationId))
+      .send({ conversation_id: conversationId, question: "Can I read this?" });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ status: "error", message: "Conversation not found" });
+    const messages = await pool.query("SELECT id FROM ai_messages WHERE conversation_id = $1", [conversationId]);
+    expect(messages.rows).toHaveLength(0);
+    expect(providerSpy).not.toHaveBeenCalled();
   });
 });
 

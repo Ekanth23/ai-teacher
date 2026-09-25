@@ -63,6 +63,24 @@ describe("api client 401 recovery", () => {
     expect(retryHeaders.Authorization).toBe("Bearer new-access");
   });
 
+  it("clears the session when the refreshed request is still unauthorized", async () => {
+    storeSession("expired-token", "refresh-token", sessionUser as never);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(401, { error: { code: "INVALID_TOKEN", message: "Authentication required." } }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, { accessToken: "new-access", refreshToken: "new-refresh" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(401, { error: { code: "INVALID_TOKEN", message: "Authentication required." } }),
+      );
+
+    await expect(request("/api/student/classes")).rejects.toBeInstanceOf(ApiError);
+    expect(getStoredAccessToken()).toBeNull();
+  });
+
   it("clears the session when refresh fails after a 401", async () => {
     storeSession("expired-token", "refresh-token", sessionUser as never);
 
@@ -78,6 +96,25 @@ describe("api client 401 recovery", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(getStoredAccessToken()).toBeNull();
+  });
+
+  it("forwards idempotency and cancellation controls without hiding aborts", async () => {
+    const controller = new AbortController();
+    fetchMock.mockRejectedValueOnce(new DOMException("cancelled", "AbortError"));
+
+    await expect(
+      request("/api/ai/conversations", {
+        method: "POST",
+        body: { question: "Hello" },
+        idempotencyKey: "request-key",
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Idempotency-Key"]).toBe("request-key");
+    expect(init.signal).toBe(controller.signal);
   });
 
   it("does not refresh when the failed request is an auth endpoint", async () => {

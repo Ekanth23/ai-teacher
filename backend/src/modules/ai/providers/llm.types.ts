@@ -36,4 +36,6 @@ export interface LlmRequestContext {
   feature?: string;
   conversationId?: string;
   requestId?: string;
+  /** Durable US-117 generation-attempt identity for usage attribution. */
+  generationAttemptId?: string;
 }

@@ -34,6 +34,28 @@ async function ensureMigrationTable() {
   `);
 }
 
+async function assertAiConversationOwnershipPreflight() {
+  const result = await client.query(`
+    SELECT
+      c.id,
+      c.organization_id AS conversation_organization_id,
+      c.student_id,
+      s.organization_id AS student_organization_id
+    FROM ai_conversations c
+    LEFT JOIN students_v2 s ON s.id = c.student_id
+    WHERE s.id IS NULL
+       OR c.organization_id IS DISTINCT FROM s.organization_id
+  `);
+
+  if (result.rows.length > 0) {
+    const remediation =
+      'AI conversation ownership preflight failed. Stop deployment and reconcile each conversation organization_id with its owning students_v2.organization_id. No rows were deleted or reassigned.';
+    console.error(remediation);
+    console.table(result.rows);
+    throw new Error(remediation);
+  }
+}
+
 async function run() {
   await client.connect();
 
@@ -46,6 +68,9 @@ async function run() {
       .sort();
 
     for (const fileName of migrationFiles) {
+      if (fileName === '046_create_ai_conversation_foundation.sql') {
+        await assertAiConversationOwnershipPreflight();
+      }
       const version = fileName.replace(/\.sql$/, '');
       const existing = await client.query(
         'SELECT 1 FROM schema_migrations WHERE version = $1',
