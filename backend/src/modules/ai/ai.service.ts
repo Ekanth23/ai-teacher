@@ -5,6 +5,11 @@ import type { LlmGenerationMetadata, LlmRequestContext } from "./providers/llm.t
 import { createUsageEvent, type LlmUsageEvent } from "./usage/usage.types.js";
 import type { UsageTracker } from "./usage/usage.tracker.js";
 import { InMemoryUsageTracker } from "./usage/in-memory.usage.tracker.js";
+import {
+  renderModelLearningContext,
+  toModelLearningContext,
+} from "./context-resolution.js";
+import type { StudentLearningContext } from "./learning-context.types.js";
 
 export interface ConversationHistoryMessage {
   role: string;
@@ -22,6 +27,8 @@ export interface GenerateTutorReplyInput {
   language?: string;
   medium?: string;
   conversationHistory?: ConversationHistoryMessage[];
+  /** Request-time US-118 context; projected safely before prompt rendering. */
+  studentLearningContext?: StudentLearningContext;
 }
 
 export interface GenerateTutorReplyOptions {
@@ -88,9 +95,29 @@ function buildPrompt(input: GenerateTutorReplyInput): string {
     language,
     medium,
     conversationHistory = [],
+    studentLearningContext,
   } = input;
 
-  const historyText = conversationHistory
+  // Only the bounded model projection is rendered.  The complete internal
+  // context/profile and all lookup identifiers remain server-side.
+  const modelContext = studentLearningContext
+    ? toModelLearningContext(studentLearningContext).context
+    : null;
+  // Explicit conversation scope remains a supported continuity source when
+  // the authoritative resolver is unresolved (Decision #11).  Resolved
+  // authoritative values take precedence; the builder never uses these labels
+  // to infer enrollment, class, syllabus, or curriculum membership.
+  const effectiveClass = modelContext?.currentClass ?? className;
+  const effectiveBoard = modelContext?.board ?? board;
+  const effectiveMedium = modelContext?.medium ?? medium;
+  const effectiveLanguage = modelContext?.languages?.join(", ") ?? language;
+  const effectiveSubject = modelContext?.subject ?? subject;
+  const effectiveChapter = modelContext?.chapter ?? chapter;
+  const effectiveTopic = modelContext?.topic ?? topic;
+  const effectiveHistory = modelContext?.conversationHistory ?? conversationHistory;
+  const structuredContext = modelContext ? renderModelLearningContext(modelContext) : "";
+
+  const historyText = effectiveHistory
     .map((message) => {
       const speaker =
         message.role === "assistant" ? "ASSISTANT" : "STUDENT";
@@ -113,15 +140,20 @@ Teaching rules:
 - Do not pretend to know information that is uncertain.
 
 Student information:
-Grade: ${studentGrade ?? "not provided"}
-Class/grade scope: ${className ?? "not provided"}
-Board: ${board ?? "not provided"}
-Medium: ${medium ?? "not provided"}
-Language: ${language ?? "not provided"}
-Subject: ${subject ?? "not provided"}
-Chapter: ${chapter ?? "not provided"}
-Topic: ${topic ?? "not provided"}
+Grade: ${studentLearningContext?.student.gradeLevel ?? studentGrade ?? "not provided"}
+Class/grade scope: ${effectiveClass ?? "not provided"}
+Board: ${effectiveBoard ?? "not provided"}
+Medium: ${effectiveMedium ?? "not provided"}
+Language: ${effectiveLanguage ?? "not provided"}
+Subject: ${effectiveSubject ?? "not provided"}
+Chapter: ${effectiveChapter ?? "not provided"}
+Topic: ${effectiveTopic ?? "not provided"}
 
+${
+  structuredContext
+    ? `Request-time learning context (use only the available values; do not invent missing context):\n${structuredContext}\n`
+    : ""
+}
 This is the student's actual context. Answer according to the available grade and scope labels; if a value is not provided, do not invent it.
 
 ${

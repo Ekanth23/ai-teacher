@@ -24,6 +24,7 @@ export type SyllabusRow = {
   name: string;
   code: string;
   status: string;
+  is_authoritative: boolean;
   created_at: string;
   updated_at: string;
 };

@@ -45,6 +45,43 @@ function handler(action: (req: Request) => Promise<unknown>) {
   };
 }
 
+router.get("/api/student/current-enrollment", requireAuth, handler(async (req) => {
+  return service.getCurrentEnrollment(req, userFor(req));
+}));
+
+router.get("/api/student/enrollments", requireAuth, handler(async (req) => {
+  const enrollments = await service.listEnrollments(req, userFor(req));
+  return { enrollments, total: enrollments.length };
+}));
+
+router.put("/api/student/current-enrollment", requireAuth, handler(async (req) => {
+  const body = req.body && typeof req.body === "object" && !Array.isArray(req.body)
+    ? (req.body as Record<string, unknown>)
+    : {};
+  const enrollmentId = typeof body.enrollment_id === "string"
+    ? body.enrollment_id
+    : typeof body.enrollmentId === "string"
+      ? body.enrollmentId
+      : typeof body.current_enrollment_id === "string"
+        ? body.current_enrollment_id
+        : "";
+  return service.selectCurrentEnrollment(req, userFor(req), enrollmentId);
+}));
+
+router.patch("/api/student/current-enrollment", requireAuth, handler(async (req) => {
+  const body = req.body && typeof req.body === "object" && !Array.isArray(req.body)
+    ? (req.body as Record<string, unknown>)
+    : {};
+  const enrollmentId = typeof body.enrollment_id === "string"
+    ? body.enrollment_id
+    : typeof body.enrollmentId === "string"
+      ? body.enrollmentId
+      : typeof body.current_enrollment_id === "string"
+        ? body.current_enrollment_id
+        : "";
+  return service.selectCurrentEnrollment(req, userFor(req), enrollmentId);
+}));
+
 router.get("/api/student/classes", requireAuth, handler(async (req) => {
   const classes = await service.listClasses(req, userFor(req));
   return { classes, total: classes.length };

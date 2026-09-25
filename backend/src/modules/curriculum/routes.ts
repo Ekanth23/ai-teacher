@@ -29,6 +29,10 @@ function getErrorResponse(error: unknown) {
       return { status: 409, payload: { error: { code: "DUPLICATE_SYLLABUS", message: maybeMessage } } };
     }
 
+    if (maybeCode === "23505" || maybeCode === "AUTHORITATIVE_SYLLABUS_CONFLICT") {
+      return { status: 409, payload: { error: { code: "AUTHORITATIVE_SYLLABUS_CONFLICT", message: "Another authoritative syllabus was selected. Please retry." } } };
+    }
+
     if (maybeCode === "DUPLICATE_SYLLABUS_VERSION") {
       return { status: 409, payload: { error: { code: "DUPLICATE_SYLLABUS_VERSION", message: maybeMessage } } };
     }
@@ -122,6 +126,29 @@ router.post("/api/classes/:classId/syllabus", requireAuth, async (req, res) => {
     return res.status(response.status).json(response.payload);
   }
 });
+
+async function designateSyllabusHandler(req: any, res: any) {
+  try {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) {
+      return res.status(401).json({ error: { code: "INVALID_TOKEN", message: "Authentication required." } });
+    }
+    const classId = getParam(req.params.classId);
+    const syllabusId = getParam(req.params.syllabusId);
+    const syllabus = classId
+      ? await service.designateAuthoritativeSyllabus(req, user, classId, syllabusId)
+      : await service.designateAuthoritativeSyllabusById(req, user, syllabusId);
+    return res.status(200).json({ syllabus });
+  } catch (error) {
+    const response = getErrorResponse(error);
+    return res.status(response.status).json(response.payload);
+  }
+}
+
+router.put("/api/classes/:classId/syllabus/:syllabusId/authoritative", requireAuth, designateSyllabusHandler);
+router.patch("/api/classes/:classId/syllabus/:syllabusId/authoritative", requireAuth, designateSyllabusHandler);
+router.put("/api/syllabus/:syllabusId/authoritative", requireAuth, designateSyllabusHandler);
+router.patch("/api/syllabus/:syllabusId/authoritative", requireAuth, designateSyllabusHandler);
 
 router.get("/api/syllabus/:syllabusId", requireAuth, async (req, res) => {
   try {

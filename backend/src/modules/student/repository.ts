@@ -24,6 +24,151 @@ export const listActiveEnrollmentsForStudent = (organizationId: string, studentI
     [studentId, organizationId]
   );
 
+export type CurrentEnrollmentRow = {
+  current_enrollment_id: string | null;
+  enrollment_id: string | null;
+  enrollment_status: string | null;
+  academic_year: string | null;
+  class_id: string | null;
+  class_name: string | null;
+  class_section: string | null;
+  class_status: string | null;
+  class_organization_id: string | null;
+  student_organization_id: string | null;
+  student_grade_level: string | null;
+};
+
+/**
+ * Resolve only the explicitly selected enrollment.  The LEFT JOINs are
+ * intentional: a non-NULL selection that is stale, inactive, deleted, or
+ * foreign is represented as unresolved instead of being replaced by another
+ * active enrollment. There is deliberately no ordering or fallback row.
+ */
+export const getCurrentEnrollmentForStudent = (organizationId: string, studentId: string) =>
+  pool.query<CurrentEnrollmentRow>(
+    `SELECT s.current_enrollment_id,
+            se.id AS enrollment_id,
+            se.status AS enrollment_status,
+            se.academic_year,
+            c.id AS class_id,
+            c.name AS class_name,
+            c.section AS class_section,
+            c.status AS class_status,
+            c.organization_id AS class_organization_id,
+            s.organization_id AS student_organization_id,
+            s.grade_level AS student_grade_level
+       FROM students_v2 s
+       LEFT JOIN student_enrollments se
+         ON se.id = s.current_enrollment_id
+        AND se.student_id = s.id
+        AND se.organization_id = s.organization_id
+       LEFT JOIN classes c
+         ON c.id = se.class_id
+        AND c.organization_id = se.organization_id
+      WHERE s.id = $1
+        AND s.organization_id = $2
+        AND s.status = 'ACTIVE'
+      LIMIT 1`,
+    [studentId, organizationId]
+  );
+
+export type StudentEnrollmentRow = {
+  enrollment_id: string;
+  class_id: string;
+  class_name: string;
+  class_section: string | null;
+  enrollment_status: string;
+  class_status: string;
+  academic_year: string | null;
+  is_current: boolean;
+};
+
+/** Active enrollments with the explicit-selection marker used by student APIs. */
+export const listStudentEnrollments = (organizationId: string, studentId: string) =>
+  pool.query<StudentEnrollmentRow>(
+    `SELECT se.id AS enrollment_id,
+            c.id AS class_id,
+            c.name AS class_name,
+            c.section AS class_section,
+            se.status AS enrollment_status,
+            c.status AS class_status,
+            se.academic_year,
+            (s.current_enrollment_id = se.id) AS is_current
+       FROM students_v2 s
+       JOIN student_enrollments se
+         ON se.student_id = s.id
+        AND se.organization_id = s.organization_id
+       JOIN classes c
+         ON c.id = se.class_id
+        AND c.organization_id = se.organization_id
+      WHERE s.id = $1
+        AND s.organization_id = $2
+        AND s.status = 'ACTIVE'
+        AND se.status = 'ACTIVE'
+        AND c.status = 'ACTIVE'
+      ORDER BY c.name ASC, se.id ASC`,
+    [studentId, organizationId]
+  );
+
+/**
+ * Change the student's explicit current enrollment.  The EXISTS predicate
+ * repeats ownership, tenant, active-enrollment, and active-class checks in
+ * the write statement so a concurrent lifecycle change cannot select an
+ * invalid row between validation and update.
+ */
+export const setCurrentEnrollmentForStudent = (
+  organizationId: string,
+  studentId: string,
+  enrollmentId: string
+) =>
+  pool.query<CurrentEnrollmentRow>(
+    `WITH updated AS (
+       UPDATE students_v2 s
+          SET current_enrollment_id = $3,
+              updated_at = NOW()
+        WHERE s.id = $2
+          AND s.organization_id = $1
+          AND s.status = 'ACTIVE'
+          AND EXISTS (
+            SELECT 1
+              FROM student_enrollments se
+              JOIN classes c
+                ON c.id = se.class_id
+               AND c.organization_id = se.organization_id
+             WHERE se.id = $3
+               AND se.student_id = s.id
+               AND se.organization_id = s.organization_id
+               AND se.status = 'ACTIVE'
+               AND c.status = 'ACTIVE'
+          )
+        RETURNING s.id, s.organization_id, s.current_enrollment_id, s.grade_level
+     )
+     SELECT updated.current_enrollment_id,
+            se.id AS enrollment_id,
+            se.status AS enrollment_status,
+            se.academic_year,
+            c.id AS class_id,
+            c.name AS class_name,
+            c.section AS class_section,
+            c.status AS class_status,
+            c.organization_id AS class_organization_id,
+             updated.organization_id AS student_organization_id,
+             updated.grade_level AS student_grade_level
+       FROM updated
+       JOIN student_enrollments se
+         ON se.id = updated.current_enrollment_id
+        AND se.student_id = updated.id
+        AND se.organization_id = updated.organization_id
+       JOIN classes c
+         ON c.id = se.class_id
+        AND c.organization_id = se.organization_id
+      LIMIT 1`,
+    [organizationId, studentId, enrollmentId]
+  );
+
+export const getCurrentEnrollmentForStudentById = (studentId: string, organizationId: string) =>
+  getCurrentEnrollmentForStudent(organizationId, studentId);
+
 // Subjects mapped to a class (student -> enrollment -> class -> class_subjects -> subjects).
 export const listSubjectsForClass = (organizationId: string, classId: string) =>
   pool.query(

@@ -24,6 +24,7 @@ import type {
   SendMessageInput,
 } from "./conversation.types.js";
 import type { ConversationScope } from "./conversation.types.js";
+import { LearningContextAssemblyError, LearningContextService } from "./learning-context.service.js";
 
 const DEFAULT_TITLE = "New Conversation";
 const HISTORY_LIMIT = 20;
@@ -174,7 +175,8 @@ export class ConversationService {
   constructor(
     private readonly repository: ConversationRepository = new ConversationRepository(),
     providerFactory: () => LlmProvider = () => createLlmProvider(),
-    usageTracker: UsageTracker = new PostgresUsageTracker()
+    usageTracker: UsageTracker = new PostgresUsageTracker(),
+    private readonly learningContext: Pick<LearningContextService, "assemble"> = new LearningContextService()
   ) {
     this.generation = new GenerationService(repository, providerFactory, usageTracker);
   }
@@ -1045,6 +1047,30 @@ export class ConversationService {
         branchId,
         historyResponseMessageId
       );
+      const branchHistory = history
+        .filter((message) => message.role === "user" || message.role === "assistant")
+        .map((message) => ({
+          role: message.role as "user" | "assistant",
+          content: message.content,
+        }));
+      const studentLearningContext = await this.learningContext.assemble({
+        organizationId: owner.organizationId,
+        studentId: owner.studentId,
+        studentGrade: owner.studentGrade,
+        conversationId: conversation.id,
+        branchId: attempt.branch_id,
+        isActiveBranch: conversation.active_branch_id === attempt.branch_id,
+        history: branchHistory,
+        scope: {
+          subject: conversation.subject,
+          chapter: conversation.scope_chapter,
+          topic: conversation.topic,
+          board: conversation.scope_board,
+          class: conversation.scope_class,
+          language: conversation.scope_language,
+          medium: conversation.scope_medium,
+        },
+      });
       const result = await this.generation.generate({
         ...owner,
         conversation,
@@ -1052,6 +1078,7 @@ export class ConversationService {
         attempt,
         studentGrade: owner.studentGrade,
         history,
+        studentLearningContext,
       });
 
       // The provider result and attempt are already committed at this point.
@@ -1087,7 +1114,13 @@ export class ConversationService {
       };
     } catch (error) {
       if (!isOwnedGenerationError(error)) {
-        await this.finalizeUnexpectedFailure(owner, conversation.id, requestMessage, attempt);
+        await this.finalizeUnexpectedFailure(
+          owner,
+          conversation.id,
+          requestMessage,
+          attempt,
+          error instanceof LearningContextAssemblyError ? "context_assembly" : "orchestration_error"
+        );
       }
       const failedAttemptId = isOwnedGenerationError(error) ? error.attempt.id : attempt.id;
       let refreshedAttempt: GenerationAttemptRecord | null = null;
@@ -1127,7 +1160,8 @@ export class ConversationService {
     owner: ConversationOwner,
     conversationId: string,
     requestMessage: MessageRecord,
-    attempt: GenerationAttemptRecord
+    attempt: GenerationAttemptRecord,
+    errorCategory = "orchestration_error"
   ): Promise<void> {
     for (let recoveryAttempt = 0; recoveryAttempt < 3; recoveryAttempt += 1) {
       try {
@@ -1152,7 +1186,7 @@ export class ConversationService {
             attempt.id,
             resolveAiProviderNameOrUnknown(),
             "unknown",
-            "orchestration_error",
+            errorCategory,
             null
           );
           if (attempt.attempt_type === "ORIGINAL") {

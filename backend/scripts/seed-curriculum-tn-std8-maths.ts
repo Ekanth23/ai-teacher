@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pool from "../src/db.js";
+import { designateAuthoritativeSyllabus } from "../src/modules/curriculum/repository.js";
 import * as chaptersRepository from "../src/modules/curriculum/chapters/repository.js";
 
 // Development-only curriculum seed for:
@@ -268,6 +269,12 @@ export async function seedCurriculumTnStd8Maths(
     );
     syllabusId = inserted.rows[0].id;
   }
+
+  // The development fixture explicitly designates this syllabus as the
+  // authoritative one for the class through the same transactional,
+  // class-scoped switch used by the API. Existing non-fixture syllabi are
+  // never promoted by a migration or by the read-time resolver.
+  await designateAuthoritativeSyllabus({ organizationId, classId, syllabusId });
 
   let syllabusVersionId: string;
   const versionLookup = await pool.query(

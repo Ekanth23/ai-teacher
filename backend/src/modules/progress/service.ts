@@ -635,7 +635,7 @@ export async function getStudentRepeatedMistakes(
 // existing US-097-105 getters: no new queries, no new calculations, no
 // reinterpretation. Each section preserves its source output exactly,
 // including null/empty states.
-async function learningProfileForStudent(organizationId: string, studentId: string): Promise<LearningProfile> {
+export async function learningProfileForStudent(organizationId: string, studentId: string): Promise<LearningProfile> {
   const [
     progress,
     homework,

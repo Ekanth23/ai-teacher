@@ -90,6 +90,10 @@ async function createStudent(organizationId: string, userId: string, classId: st
     [organizationId, student.rows[0].id, classId]
   );
   created.enrollments.push(enrollment.rows[0].id);
+  await pool.query(
+    `UPDATE students_v2 SET current_enrollment_id = $1 WHERE id = $2 AND organization_id = $3`,
+    [enrollment.rows[0].id, student.rows[0].id, organizationId]
+  );
   return student.rows[0].id as string;
 }
 

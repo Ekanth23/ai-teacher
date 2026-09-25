@@ -99,7 +99,11 @@ export async function getClassForUser(req: Request, user: AuthenticatedUser, cla
     return { classRecord, organizationContext };
   }
 
-  const enrollmentResult = await repository.findActiveClassEnrollmentForStudent(user.id, classId);
+  const enrollmentResult = await repository.findActiveClassEnrollmentForStudent(
+    user.id,
+    classId,
+    organizationContext.organization.id
+  );
   if (organizationContext.role.name === "STUDENT" && enrollmentResult.rows.length > 0) {
     return { classRecord, organizationContext };
   }
@@ -199,6 +203,64 @@ export async function listSyllabusVersions(req: any, user: any, syllabusId: stri
   return result.rows;
 }
 
+export async function designateAuthoritativeSyllabus(
+  req: Request,
+  user: AuthenticatedUser,
+  classId: string,
+  syllabusId: string
+) {
+  if (!isValidUuid(classId)) {
+    throw new CurriculumValidationError("VALIDATION_ERROR", "Class id is invalid.");
+  }
+  if (!isValidUuid(syllabusId)) {
+    throw new CurriculumValidationError("VALIDATION_ERROR", "Syllabus id is invalid.");
+  }
+
+  // Management authorization is intentionally the existing curriculum
+  // convention: organization admins or a teacher assigned to this class.
+  const { classRecord, organizationContext } = await getClassForUser(req, user, classId, "manage");
+  const syllabusResult = await repository.getSyllabusById(syllabusId);
+  const syllabus = syllabusResult.rows[0];
+  if (!syllabus || syllabus.class_id !== classRecord.id || syllabus.organization_id !== organizationContext.organization.id) {
+    throw new CurriculumNotFoundError("Syllabus not found for this class.");
+  }
+  if (
+    syllabus.status !== "ACTIVE" ||
+    classRecord.status !== "ACTIVE" ||
+    syllabus.board_status !== "ACTIVE" ||
+    syllabus.medium_status !== "ACTIVE"
+  ) {
+    throw new CurriculumValidationError(
+      "VALIDATION_ERROR",
+      "Only an active syllabus with an active board and medium on an active class can be designated."
+    );
+  }
+
+  return repository.designateAuthoritativeSyllabus({
+    organizationId: organizationContext.organization.id,
+    classId: classRecord.id,
+    syllabusId: syllabus.id,
+  });
+}
+
+// Backwards-friendly service name for callers that describe the operation as
+// setting, rather than designating, the authoritative syllabus.
+export const setAuthoritativeSyllabus = designateAuthoritativeSyllabus;
+
+export async function designateAuthoritativeSyllabusById(
+  req: Request,
+  user: AuthenticatedUser,
+  syllabusId: string
+) {
+  if (!isValidUuid(syllabusId)) {
+    throw new CurriculumValidationError("VALIDATION_ERROR", "Syllabus id is invalid.");
+  }
+  const result = await repository.getSyllabusById(syllabusId);
+  const syllabus = result.rows[0];
+  if (!syllabus) throw new CurriculumNotFoundError("Syllabus not found.");
+  return designateAuthoritativeSyllabus(req, user, syllabus.class_id, syllabus.id);
+}
+
 export async function createSyllabusVersion(req: any, user: any, syllabusId: string, input: Record<string, unknown>) {
   const syllabusResult = await repository.getSyllabusById(syllabusId);
   if (syllabusResult.rows.length === 0) {
@@ -254,6 +316,9 @@ export default {
   listClassSyllabus,
   getSyllabusById,
   createSyllabus,
+  designateAuthoritativeSyllabus,
+  designateAuthoritativeSyllabusById,
+  setAuthoritativeSyllabus,
   listSyllabusVersions,
   createSyllabusVersion,
 };

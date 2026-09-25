@@ -31,7 +31,7 @@ async function requireStudent(req: Request, user: AuthenticatedUser) {
   return { context, student };
 }
 
-const classDto = (row: { id: string; name: string; section: string | null }) => ({
+const classDto = (row: { id: string; name: string | null; section: string | null }) => ({
   id: row.id,
   name: row.name,
   section: row.section ?? null,
@@ -64,6 +64,91 @@ export async function listClasses(req: Request, user: AuthenticatedUser) {
   return classes.map(classDto);
 }
 
+export async function listEnrollments(req: Request, user: AuthenticatedUser) {
+  const { context, student } = await requireStudent(req, user);
+  return (await repository.listStudentEnrollments(context.organization.id, student.id)).rows.map((row) => ({
+    enrollment_id: row.enrollment_id,
+    class: {
+      id: row.class_id,
+      name: row.class_name,
+      section: row.class_section,
+    },
+    academic_year: row.academic_year,
+    status: row.enrollment_status,
+    is_current: row.is_current,
+  }));
+}
+
+function currentEnrollmentDto(
+  row: repository.CurrentEnrollmentRow | undefined,
+  organizationId?: string
+) {
+  if (
+    !row ||
+    !row.current_enrollment_id ||
+    !row.enrollment_id ||
+    row.enrollment_status !== "ACTIVE" ||
+    !row.class_id ||
+    row.class_status !== "ACTIVE" ||
+    row.class_organization_id !== row.student_organization_id ||
+    (organizationId !== undefined && row.student_organization_id !== organizationId)
+  ) {
+    return {
+      status: "unresolved" as const,
+      enrollment: null,
+      current_class: null,
+    };
+  }
+  return {
+    status: "resolved" as const,
+    enrollment: {
+      id: row.enrollment_id,
+      academic_year: row.academic_year,
+      status: row.enrollment_status,
+    },
+    current_class: {
+      id: row.class_id,
+      name: row.class_name,
+      section: row.class_section,
+    },
+  };
+}
+
+export async function getCurrentEnrollment(req: Request, user: AuthenticatedUser) {
+  const { context, student } = await requireStudent(req, user);
+  const row = (await repository.getCurrentEnrollmentForStudent(context.organization.id, student.id)).rows[0];
+  return currentEnrollmentDto(row, context.organization.id);
+}
+
+export async function selectCurrentEnrollment(
+  req: Request,
+  user: AuthenticatedUser,
+  enrollmentId: string
+) {
+  const { context, student } = await requireStudent(req, user);
+  const normalizedEnrollmentId = requiredUuid(enrollmentId, "Enrollment id");
+  let result;
+  try {
+    result = await repository.setCurrentEnrollmentForStudent(
+      context.organization.id,
+      student.id,
+      normalizedEnrollmentId
+    );
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error) {
+      const code = String((error as { code?: unknown }).code);
+      if (code === "23503" || code === "P0001") {
+        throw new AuthorizationError("ENROLLMENT_NOT_FOUND", "The enrollment is not available for this student.");
+      }
+    }
+    throw error;
+  }
+  if (result.rows.length === 0) {
+    throw new AuthorizationError("ENROLLMENT_NOT_FOUND", "The enrollment is not available for this student.");
+  }
+  return currentEnrollmentDto(result.rows[0], context.organization.id);
+}
+
 export async function listClassSubjects(req: Request, user: AuthenticatedUser, classId: string) {
   await requireStudent(req, user);
   const normalizedClassId = requiredUuid(classId, "Class id");
@@ -80,7 +165,14 @@ export async function getDashboard(req: Request, user: AuthenticatedUser) {
   const organizationId = context.organization.id;
 
   const classes = (await repository.listActiveEnrollmentsForStudent(organizationId, student.id)).rows;
-  const currentClass = classes[0] ?? null;
+  const currentEnrollmentRow = (
+    await repository.getCurrentEnrollmentForStudent(organizationId, student.id)
+  ).rows[0];
+  const currentEnrollment = currentEnrollmentDto(currentEnrollmentRow, organizationId);
+  const currentClass =
+    currentEnrollment.current_class && currentEnrollment.current_class.name
+      ? currentEnrollment.current_class
+      : null;
 
   const subjects = currentClass
     ? (await repository.listSubjectsForClass(organizationId, currentClass.id)).rows.map(subjectDto)

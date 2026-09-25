@@ -10,6 +10,7 @@ import type {
   MessageRecord,
 } from "./conversation.types.js";
 import { ConversationRepository } from "./conversation.repository.js";
+import type { StudentLearningContext } from "./learning-context.types.js";
 
 export interface GenerationOwner {
   organizationId: string;
@@ -23,6 +24,7 @@ export interface GenerateAttemptInput extends GenerationOwner {
   attempt: GenerationAttemptRecord;
   studentGrade?: string | null;
   history: Array<{ role: string; content: string }>;
+  studentLearningContext?: StudentLearningContext;
 }
 
 export class GenerationFailedError extends Error {
@@ -59,6 +61,7 @@ export class GenerationService {
           language: input.conversation.scope_language ?? undefined,
           medium: input.conversation.scope_medium ?? undefined,
           conversationHistory: input.history,
+          studentLearningContext: input.studentLearningContext,
         },
         {
           provider,
@@ -164,7 +167,14 @@ export class GenerationService {
       if (error instanceof GenerationFailedError) throw error;
 
       const usageEvent = error instanceof TutorGenerationError ? error.usageEvent : undefined;
-      const category = usageEvent?.errorCategory ?? categorizeProviderError(error);
+      const isContextAssemblyFailure =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: unknown }).code === "AI_CONTEXT_ASSEMBLY_FAILED";
+      const category = isContextAssemblyFailure
+        ? "context_assembly"
+        : usageEvent?.errorCategory ?? categorizeProviderError(error);
       const providerName = usageEvent?.provider ?? resolveAiProviderNameOrUnknown();
       const model = usageEvent?.model ?? "unknown";
       let failedAttempt: GenerationAttemptRecord | null = null;

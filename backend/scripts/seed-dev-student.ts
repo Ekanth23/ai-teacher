@@ -147,13 +147,28 @@ export async function seedDevStudent(input: SeedDevStudentInput): Promise<SeedDe
        LIMIT 1`,
       [organizationId, studentId, classId]
     );
+    let enrollmentId: string;
     if (enrollmentLookup.rows.length === 0) {
-      await client.query(
+      const enrollmentResult = await client.query(
         `INSERT INTO student_enrollments (organization_id, student_id, class_id, academic_year, status)
-         VALUES ($1, $2, $3, $4, 'ACTIVE')`,
+         VALUES ($1, $2, $3, $4, 'ACTIVE')
+         RETURNING id`,
         [organizationId, studentId, classId, ACADEMIC_YEAR]
       );
+      enrollmentId = enrollmentResult.rows[0].id;
+    } else {
+      enrollmentId = enrollmentLookup.rows[0].id;
     }
+
+    // This fixture explicitly configures the student's current enrollment. It
+    // is not a runtime inference and remains idempotent when re-seeded.
+    await client.query(
+      `UPDATE students_v2
+          SET current_enrollment_id = $1,
+              updated_at = NOW()
+        WHERE id = $2 AND organization_id = $3`,
+      [enrollmentId, studentId, organizationId]
+    );
 
     // 7. Subject + class mapping so the dashboard shows a meaningful "My Subjects".
     const subjectLookup = await client.query(
