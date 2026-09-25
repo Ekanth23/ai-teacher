@@ -11,6 +11,7 @@ import type {
 } from "./conversation.types.js";
 import { ConversationRepository } from "./conversation.repository.js";
 import type { StudentLearningContext } from "./learning-context.types.js";
+import type { BoardResponseContext } from "./board-response.types.js";
 
 export interface GenerationOwner {
   organizationId: string;
@@ -25,6 +26,7 @@ export interface GenerateAttemptInput extends GenerationOwner {
   studentGrade?: string | null;
   history: Array<{ role: string; content: string }>;
   studentLearningContext?: StudentLearningContext;
+  boardResponseContext?: BoardResponseContext;
 }
 
 export class GenerationFailedError extends Error {
@@ -55,13 +57,13 @@ export class GenerationService {
           subject: input.conversation.subject ?? undefined,
           topic: input.conversation.topic ?? undefined,
           studentGrade: input.studentGrade ?? undefined,
-          board: input.conversation.scope_board ?? undefined,
           className: input.conversation.scope_class ?? undefined,
           chapter: input.conversation.scope_chapter ?? undefined,
           language: input.conversation.scope_language ?? undefined,
           medium: input.conversation.scope_medium ?? undefined,
           conversationHistory: input.history,
           studentLearningContext: input.studentLearningContext,
+          boardResponseContext: input.boardResponseContext,
         },
         {
           provider,

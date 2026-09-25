@@ -17,6 +17,8 @@ import {
   type ContextMessage,
   type EnrollmentContext,
   type LearningContextBuildInput,
+  type LearningHierarchyInput,
+  type LearningHierarchyResolution,
   type StudentLearningContext,
 } from "./learning-context.types.js";
 
@@ -53,6 +55,156 @@ function component(
   values: Omit<ContextAssemblyComponent, "status"> = {}
 ): ContextAssemblyComponent {
   return { status, ...values };
+}
+
+/**
+ * Shared exact hierarchy resolver used by US-118 normal assembly and the
+ * US-119 validated alternate-board overlay. It resolves only through the
+ * authenticated organization/class, designated syllabus, class-subject
+ * relationship, and exact active curriculum nodes.
+ */
+export async function resolveLearningContextHierarchy(
+  repository: Pick<
+    LearningContextRepository,
+    "findSubjects" | "findCurriculumNodes"
+  >,
+  input: LearningHierarchyInput
+): Promise<LearningHierarchyResolution> {
+  const scope = input.scope ?? {};
+  let subject: ContextEntity = unresolved(scope.subject ? "NO_SUBJECT" : "NOT_PROVIDED");
+  let chapter: ContextEntity = unresolved(scope.chapter ? "NO_CHAPTER" : "NOT_PROVIDED");
+  let topic: ContextEntity = unresolved(scope.topic ? "NO_TOPIC" : "NOT_PROVIDED");
+  let subjectReport: ContextAssemblyComponent = component(
+    scope.subject ? "unresolved" : "skipped",
+    scope.subject ? { reason: "NO_SUBJECT" } : {}
+  );
+  let chapterReport: ContextAssemblyComponent = component(
+    scope.chapter ? "unresolved" : "skipped",
+    scope.chapter ? { reason: "NO_CHAPTER" } : {}
+  );
+  let topicReport: ContextAssemblyComponent = component(
+    scope.topic ? "unresolved" : "skipped",
+    scope.topic ? { reason: "NO_TOPIC" } : {}
+  );
+
+  if (input.organizationId && input.classId && input.syllabusId && scope.subject) {
+    try {
+      const rows = (
+        await repository.findSubjects(input.organizationId, input.classId, scope.subject)
+      ).rows;
+      if (rows.length === 1) {
+        subject = resolvedEntity({
+          id: rows[0].id,
+          name: rows[0].name,
+          code: rows[0].code,
+          source: "class_subject_relationship",
+        });
+        subjectReport = component("resolved", { count: 1 });
+      } else {
+        subject = unresolved(rows.length > 1 ? "AMBIGUOUS_SUBJECT" : "NO_SUBJECT");
+        subjectReport = component("unresolved", {
+          count: rows.length,
+          reason: rows.length > 1 ? "AMBIGUOUS_SUBJECT" : "NO_SUBJECT",
+        });
+      }
+    } catch {
+      subject = unresolved("SOURCE_UNAVAILABLE");
+      subjectReport = component("failed", { reason: "SOURCE_ERROR" });
+    }
+  }
+
+  if (subject.status === "resolved" && input.classId && input.syllabusId && scope.chapter) {
+    try {
+      const rows = (
+        await repository.findCurriculumNodes(
+          input.organizationId,
+          input.classId,
+          input.syllabusId,
+          subject.id as string,
+          "CHAPTER",
+          scope.chapter
+        )
+      ).rows;
+      if (rows.length === 1) {
+        chapter = resolvedEntity({
+          id: rows[0].id,
+          name: rows[0].title,
+          code: rows[0].code,
+          source: "authoritative_curriculum_hierarchy",
+        });
+        chapterReport = component("resolved", { count: 1 });
+      } else {
+        chapter = unresolved(rows.length > 1 ? "AMBIGUOUS_CHAPTER" : "NO_CHAPTER");
+        chapterReport = component("unresolved", {
+          count: rows.length,
+          reason: rows.length > 1 ? "AMBIGUOUS_CHAPTER" : "NO_CHAPTER",
+        });
+      }
+    } catch {
+      chapter = unresolved("SOURCE_UNAVAILABLE");
+      chapterReport = component("failed", { reason: "SOURCE_ERROR" });
+    }
+  }
+
+  if (subject.status === "resolved" && input.classId && input.syllabusId && scope.topic) {
+    try {
+      const rows = (
+        await repository.findCurriculumNodes(
+          input.organizationId,
+          input.classId,
+          input.syllabusId,
+          subject.id as string,
+          "TOPIC",
+          scope.topic,
+          chapter.status === "resolved" ? chapter.id : null
+        )
+      ).rows;
+      if (rows.length === 1) {
+        const row = rows[0];
+        topic = resolvedEntity({
+          id: row.id,
+          name: row.title,
+          code: row.code,
+          source: "authoritative_curriculum_hierarchy",
+        });
+        topicReport = component("resolved", { count: 1 });
+        if (
+          !scope.chapter &&
+          chapter.status !== "resolved" &&
+          row.parent_id &&
+          normalizeContextLabel(row.parent_type) === "chapter" &&
+          row.parent_title
+        ) {
+          chapter = resolvedEntity({
+            id: row.parent_id,
+            name: row.parent_title,
+            source: "authoritative_curriculum_hierarchy",
+          });
+          chapterReport = component("resolved", { count: 1 });
+        }
+      } else {
+        topic = unresolved(rows.length > 1 ? "AMBIGUOUS_TOPIC" : "NO_TOPIC");
+        topicReport = component("unresolved", {
+          count: rows.length,
+          reason: rows.length > 1 ? "AMBIGUOUS_TOPIC" : "NO_TOPIC",
+        });
+      }
+    } catch {
+      topic = unresolved("SOURCE_UNAVAILABLE");
+      topicReport = component("failed", { reason: "SOURCE_ERROR" });
+    }
+  }
+
+  return {
+    subject,
+    chapter,
+    topic,
+    reports: {
+      subject: subjectReport,
+      chapter: chapterReport,
+      topic: topicReport,
+    },
+  };
 }
 
 function rowIsCurrentAndActive(row: {
@@ -111,6 +263,10 @@ export class LearningContextService {
     this.now = dependencies.now ?? (() => new Date());
     this.createAssemblyId = dependencies.createAssemblyId ?? (() => randomUUID());
     this.maxModelContextTokens = dependencies.maxModelContextTokens ?? DEFAULT_MAX_MODEL_CONTEXT_TOKENS;
+  }
+
+  async resolveCurriculumScope(input: LearningHierarchyInput): Promise<LearningHierarchyResolution> {
+    return resolveLearningContextHierarchy(this.repository, input);
   }
 
   async assemble(input: LearningContextBuildInput): Promise<StudentLearningContext>;
@@ -278,127 +434,18 @@ export class LearningContextService {
     }
 
     const scope = input.scope ?? {};
-    let subject: ContextEntity = unresolved(scope.subject ? "NO_SUBJECT" : "NOT_PROVIDED");
-    let chapter: ContextEntity = unresolved(scope.chapter ? "NO_CHAPTER" : "NOT_PROVIDED");
-    let topic: ContextEntity = unresolved(scope.topic ? "NO_TOPIC" : "NOT_PROVIDED");
-    let subjectReport = component(scope.subject ? "unresolved" : "skipped", {
-      ...(scope.subject ? { reason: "NO_SUBJECT" as const } : {}),
+    const hierarchy = await this.resolveCurriculumScope({
+      organizationId,
+      classId: currentResolved ? currentClass.id : null,
+      syllabusId: syllabus.status === "resolved" ? syllabus.id : null,
+      scope: {
+        subject: scope.subject,
+        chapter: scope.chapter,
+        topic: scope.topic,
+      },
     });
-    let chapterReport = component(scope.chapter ? "unresolved" : "skipped", {
-      ...(scope.chapter ? { reason: "NO_CHAPTER" as const } : {}),
-    });
-    let topicReport = component(scope.topic ? "unresolved" : "skipped", {
-      ...(scope.topic ? { reason: "NO_TOPIC" as const } : {}),
-    });
-
-    if (currentResolved && currentClass.id && scope.subject) {
-      try {
-        const rows = (await this.repository.findSubjects(organizationId, currentClass.id, scope.subject)).rows;
-        if (rows.length === 1) {
-          subject = resolvedEntity({
-            id: rows[0].id,
-            name: rows[0].name,
-            code: rows[0].code,
-            source: "class_subject_relationship",
-          });
-          subjectReport = component("resolved", { count: 1 });
-        } else {
-          subject = unresolved(rows.length > 1 ? "AMBIGUOUS_SUBJECT" : "NO_SUBJECT");
-          subjectReport = component("unresolved", {
-            count: rows.length,
-            reason: rows.length > 1 ? "AMBIGUOUS_SUBJECT" : "NO_SUBJECT",
-          });
-        }
-      } catch {
-        subject = unresolved("SOURCE_UNAVAILABLE");
-        subjectReport = component("failed", { reason: "SOURCE_ERROR" });
-      }
-    }
-
-    if (subject.status === "resolved" && syllabus.status === "resolved" && syllabus.id && scope.chapter) {
-      try {
-        const rows = (
-          await this.repository.findCurriculumNodes(
-            organizationId,
-            currentClass.id as string,
-            syllabus.id,
-            subject.id as string,
-            "CHAPTER",
-            scope.chapter
-          )
-        ).rows;
-        if (rows.length === 1) {
-          chapter = resolvedEntity({
-            id: rows[0].id,
-            name: rows[0].title,
-            code: rows[0].code,
-            source: "authoritative_curriculum_hierarchy",
-          });
-          chapterReport = component("resolved", { count: 1 });
-        } else {
-          chapter = unresolved(rows.length > 1 ? "AMBIGUOUS_CHAPTER" : "NO_CHAPTER");
-          chapterReport = component("unresolved", {
-            count: rows.length,
-            reason: rows.length > 1 ? "AMBIGUOUS_CHAPTER" : "NO_CHAPTER",
-          });
-        }
-      } catch {
-        chapter = unresolved("SOURCE_UNAVAILABLE");
-        chapterReport = component("failed", { reason: "SOURCE_ERROR" });
-      }
-    }
-
-    if (subject.status === "resolved" && syllabus.status === "resolved" && syllabus.id && scope.topic) {
-      try {
-        const rows = (
-          await this.repository.findCurriculumNodes(
-            organizationId,
-            currentClass.id as string,
-            syllabus.id,
-            subject.id as string,
-            "TOPIC",
-            scope.topic,
-            chapter.status === "resolved" ? chapter.id : null
-          )
-        ).rows;
-        if (rows.length === 1) {
-          const row = rows[0];
-          topic = resolvedEntity({
-            id: row.id,
-            name: row.title,
-            code: row.code,
-            source: "authoritative_curriculum_hierarchy",
-          });
-          topicReport = component("resolved", { count: 1 });
-          // A topic's active chapter parent is authoritative context.  Fill
-          // it only when the conversation did not provide a conflicting
-          // chapter label; never infer a chapter from a topic name alone.
-          if (
-            !scope.chapter &&
-            chapter.status !== "resolved" &&
-            row.parent_id &&
-            normalizeContextLabel(row.parent_type) === "chapter" &&
-            row.parent_title
-          ) {
-            chapter = resolvedEntity({
-              id: row.parent_id,
-              name: row.parent_title,
-              source: "authoritative_curriculum_hierarchy",
-            });
-            chapterReport = component("resolved", { count: 1 });
-          }
-        } else {
-          topic = unresolved(rows.length > 1 ? "AMBIGUOUS_TOPIC" : "NO_TOPIC");
-          topicReport = component("unresolved", {
-            count: rows.length,
-            reason: rows.length > 1 ? "AMBIGUOUS_TOPIC" : "NO_TOPIC",
-          });
-        }
-      } catch {
-        topic = unresolved("SOURCE_UNAVAILABLE");
-        topicReport = component("failed", { reason: "SOURCE_ERROR" });
-      }
-    }
+    const { subject, chapter, topic } = hierarchy;
+    const { subject: subjectReport, chapter: chapterReport, topic: topicReport } = hierarchy.reports;
 
     let learningProfile: import("../progress/types.js").LearningProfile | null = null;
     let profileReport: ContextAssemblyComponent = component("loaded", { count: 1 });

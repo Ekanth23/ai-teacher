@@ -257,6 +257,9 @@ export async function findActiveCurriculumNodes(
         AND s.id = $3
         AND s.is_authoritative = TRUE
         AND s.status = 'ACTIVE'
+       LEFT JOIN curriculum_versions cv
+         ON cv.id = sv.curriculum_version_id
+        AND cv.board_id = s.board_id
        LEFT JOIN curriculum_nodes parent
          ON parent.id = n.parent_node_id
         AND parent.curriculum_structure_id = n.curriculum_structure_id
@@ -268,6 +271,16 @@ export async function findActiveCurriculumNodes(
         AND cs.subject_id = $4
         AND cs.status = 'ACTIVE'
         AND sv.status = 'ACTIVE'
+        AND (sv.effective_from IS NULL OR sv.effective_from <= CURRENT_DATE)
+        AND (sv.effective_to IS NULL OR sv.effective_to >= CURRENT_DATE)
+        AND (
+          cv.id IS NULL
+          OR (
+            cv.status = 'ACTIVE'
+            AND (cv.effective_from IS NULL OR cv.effective_from <= CURRENT_DATE)
+            AND (cv.effective_to IS NULL OR cv.effective_to >= CURRENT_DATE)
+          )
+        )
         AND n.status = 'ACTIVE'
         AND node_type.status = 'ACTIVE'
         AND lower(node_type.code) = lower($5)

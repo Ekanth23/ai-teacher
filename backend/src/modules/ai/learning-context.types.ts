@@ -138,6 +138,28 @@ export interface StudentLearningContext {
   components: ContextAssemblyReport;
 }
 
+export interface LearningHierarchyResolution {
+  subject: ContextEntity;
+  chapter: ContextEntity;
+  topic: ContextEntity;
+  reports: {
+    subject: ContextAssemblyComponent;
+    chapter: ContextAssemblyComponent;
+    topic: ContextAssemblyComponent;
+  };
+}
+
+export interface LearningHierarchyInput {
+  organizationId: string;
+  classId: string | null;
+  syllabusId: string | null;
+  scope: {
+    subject?: string | null;
+    chapter?: string | null;
+    topic?: string | null;
+  };
+}
+
 export interface LearningContextBuildInput {
   organizationId: string;
   studentId: string;

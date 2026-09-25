@@ -711,7 +711,7 @@ describe("US-117 remediation lifecycle", () => {
     expect(attempts.rows[0].count).toBe(1);
   });
 
-  it("updates scope for subsequent generations without rewriting history", async () => {
+  it("updates scope labels without treating arbitrary labels as authoritative context", async () => {
     const f = await fixture("scope-lifecycle");
     const prompts: string[] = [];
     vi.spyOn(MockLlmProvider.prototype, "generateWithMetadata").mockImplementation(async (prompt) => {
@@ -738,8 +738,9 @@ describe("US-117 remediation lifecycle", () => {
       .set(auth(f.studentToken, f.organizationId))
       .send({ question: "Inherit the scope" });
     expect(followUp.status).toBe(201);
-    expect(prompts[1]).toContain("Board: CBSE");
-    expect(prompts[1]).toContain("Chapter: Fractions");
+    expect(prompts[1]).toContain("Board: not provided");
+    expect(prompts[1]).toContain("Subject: not provided");
+    expect(prompts[1]).toContain("Chapter: not provided");
 
     const changed = await request(app)
       .patch(`/api/ai/conversations/${conversationId}/scope`)
@@ -754,8 +755,8 @@ describe("US-117 remediation lifecycle", () => {
       .set(auth(f.studentToken, f.organizationId))
       .send({ question: "Use the new scope" });
     expect(afterChange.status).toBe(201);
-    expect(prompts[2]).toContain("Subject: Science");
-    expect(prompts[2]).toContain("Chapter: Plants");
+    expect(prompts[2]).toContain("Subject: not provided");
+    expect(prompts[2]).toContain("Chapter: not provided");
     expect(prompts[2]).toContain("Board: not provided");
 
     const history = await request(app)
