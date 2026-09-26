@@ -13,6 +13,11 @@ import type {
   ContextEntity,
   LearningHierarchyResolution,
 } from "./learning-context.types.js";
+import {
+  findExactLanguage,
+  parseLanguageRequest,
+  type LanguageIdentity,
+} from "./language-request-parser.js";
 import type {
   ActiveBoardIdentity,
   BoardComparisonProjection,
@@ -25,7 +30,29 @@ import type {
   BoardResponseResolution,
   BoardScopeDuration,
   BoardScopeMutation,
+  ResponseLanguageAvailability,
+  ResponseLanguageSource,
 } from "./board-response.types.js";
+
+/**
+ * Internal-only companion to a resolved board context. Authoritative language
+ * identities (name + code) are needed for Decision #119 applicability but must
+ * never reach the provider-safe context.
+ */
+interface InternalBoardResolution extends BoardResponseResolution {
+  authoritativeLanguages: LanguageIdentity[];
+}
+
+type ResponseLanguageResolution = Pick<
+  BoardResponseContext,
+  "responseLanguage" | "responseLanguageSource" | "responseLanguageAvailability"
+>;
+
+const UNRESOLVED_LANGUAGE: ResponseLanguageResolution = {
+  responseLanguage: null,
+  responseLanguageSource: null,
+  responseLanguageAvailability: "UNRESOLVED",
+};
 
 interface ResolvedEntity {
   id: string;
@@ -96,6 +123,18 @@ function entityValue(entity: ContextEntity | undefined): ResolvedEntity | null {
 
 function sameBoard(left: ActiveBoardIdentity, right: ActiveBoardIdentity): boolean {
   return left.id === right.id;
+}
+
+/**
+ * Internal-only projection of the authoritative syllabus language capability
+ * list. Decision #119 clause 5 forbids using list ordering as a selection rule,
+ * so callers must not depend on this array's order.
+ */
+function languageIdentitiesOf(context: ResolvedBoardContext): LanguageIdentity[] {
+  return context.languages.map((language) => ({
+    name: language.name,
+    code: language.code,
+  }));
 }
 
 function safeScalar(value: string, maxLength: number): string {
@@ -199,14 +238,118 @@ export class BoardResponseService {
 
   async resolve(input: BoardResponseInput): Promise<BoardResponseResolution> {
     try {
-      return await this.resolveInternal(input);
+      const internal = await this.resolveInternal(input);
+      // US-120: one uniform response-language resolution across every existing
+      // board-response path. Read-only: never persists and never mutates scope.
+      const language = this.resolveResponseLanguage(
+        input,
+        internal.context,
+        internal.authoritativeLanguages
+      );
+      return {
+        context: { ...internal.context, ...language },
+        scopeMutation: internal.scopeMutation,
+      };
     } catch (error) {
       if (error instanceof BoardResponseResolutionError) throw error;
       throw new BoardResponseResolutionError(error);
     }
   }
 
-  private async resolveInternal(input: BoardResponseInput): Promise<BoardResponseResolution> {
+  /**
+   * US-120 response-language resolution.
+   *
+   * Tier 1 (explicit request) and tier 3 (configured language) are resolved
+   * server-side. Tier 2 (current-question language) is deliberately absent
+   * because Decision #118 requires it to be determined inside the existing
+   * AI/model pipeline; the model applies it between the two server-side tiers.
+   *
+   * Decision #116: strictly read-only. This method never writes conversation
+   * scope, `scope_language`, or any persistent configuration.
+   */
+  private resolveResponseLanguage(
+    input: BoardResponseInput,
+    context: BoardResponseContext,
+    authoritativeLanguages: LanguageIdentity[]
+  ): ResponseLanguageResolution {
+    const parsed = parseLanguageRequest(input.question, authoritativeLanguages);
+
+    // Tier 1 - explicit language request.
+    if (parsed.intent === "CURRENT_RESPONSE_LANGUAGE" && !parsed.ambiguous) {
+      if (parsed.language) {
+        return {
+          responseLanguage: safeModelLabel(parsed.language.name),
+          responseLanguageSource: "EXPLICIT_REQUEST",
+          responseLanguageAvailability: "AVAILABLE",
+        };
+      }
+      // Decision #117 - honored for the current response even though the
+      // language is outside the authoritative syllabus capability list.
+      if (parsed.requestedTarget) {
+        return {
+          responseLanguage: safeModelLabel(parsed.requestedTarget),
+          responseLanguageSource: "EXPLICIT_REQUEST",
+          responseLanguageAvailability: "UNAVAILABLE",
+        };
+      }
+      // A real request whose target the server cannot confidently name. No
+      // language is asserted; the model resolves it (Decision #118) under the
+      // same Decision #117 guard.
+      if (parsed.unverifiedExplicitRequest) {
+        return {
+          responseLanguage: null,
+          responseLanguageSource: "EXPLICIT_REQUEST",
+          responseLanguageAvailability: "UNAVAILABLE",
+        };
+      }
+    }
+
+    // Tier 3 - configured language (Decision #119). `context.languages` is
+    // intentionally not used as a selection source; clause 5 forbids treating
+    // syllabus_languages ordering as a product rule.
+    const scopeLanguage = input.conversationScope.language;
+
+    // Clause 1b - no authoritative syllabus resolved, so applicability cannot be
+    // evaluated. Availability is reported as UNAVAILABLE so the model never
+    // claims curriculum-language alignment it cannot prove.
+    if (authoritativeLanguages.length === 0) {
+      if (scopeLanguage && scopeLanguage.trim()) {
+        return {
+          responseLanguage: safeModelLabel(scopeLanguage),
+          responseLanguageSource: "CONFIGURED",
+          responseLanguageAvailability: "UNAVAILABLE",
+        };
+      }
+      return UNRESOLVED_LANGUAGE;
+    }
+
+    // Clause 1 + 1a - exact normalized name/code match, never fuzzy.
+    const applicable = findExactLanguage(scopeLanguage, authoritativeLanguages);
+    if (applicable) {
+      return {
+        responseLanguage: safeModelLabel(applicable.name),
+        responseLanguageSource: "CONFIGURED",
+        responseLanguageAvailability: "AVAILABLE",
+      };
+    }
+
+    // Clause 2 - exactly one authoritative syllabus language.
+    if (authoritativeLanguages.length === 1) {
+      return {
+        responseLanguage: safeModelLabel(authoritativeLanguages[0].name),
+        responseLanguageSource: "CONFIGURED",
+        responseLanguageAvailability: "AVAILABLE",
+      };
+    }
+
+    // Clause 3 + 4 - multiple authoritative languages and no applicable
+    // scope_language. Never arbitrarily select one. Whether clarification is
+    // actually required depends on the model-side tier 2, so this stays
+    // UNRESOLVED and the prompt rule is conditional.
+    return UNRESOLVED_LANGUAGE;
+  }
+
+  private async resolveInternal(input: BoardResponseInput): Promise<InternalBoardResolution> {
     const activeBoards = await this.repository.listActiveBoards();
     const parsed = parseBoardRequest(input.question, activeBoards);
     const normal = this.normalContext(input.learningContext);
@@ -215,6 +358,7 @@ export class BoardResponseService {
       return {
         context: this.clarificationContext(parsed),
         scopeMutation: null,
+        authoritativeLanguages: [],
       };
     }
 
@@ -231,6 +375,7 @@ export class BoardResponseService {
             "TARGETED_CLARIFICATION"
           ),
           scopeMutation: null,
+          authoritativeLanguages: [],
         };
       }
       const evidence = await this.loadEvidence(input, normal);
@@ -245,6 +390,7 @@ export class BoardResponseService {
         scopeMutation: input.allowScopeMutation
           ? scopeMutationFor(normal, input.conversationScope, true)
           : null,
+        authoritativeLanguages: languageIdentitiesOf(normal),
       };
     }
 
@@ -259,6 +405,7 @@ export class BoardResponseService {
             reason: "MISSING_BOARD_TARGET",
           }),
           scopeMutation: null,
+          authoritativeLanguages: [],
         };
       }
       const resolved = await this.resolveExactBoard(
@@ -271,6 +418,7 @@ export class BoardResponseService {
         return {
           context: this.emptyContext(parsed, resolved.reason, "TARGETED_CLARIFICATION"),
           scopeMutation: null,
+          authoritativeLanguages: [],
         };
       }
       const evidence = await this.loadEvidence(input, resolved.context);
@@ -285,6 +433,7 @@ export class BoardResponseService {
           input.allowScopeMutation && parsed.intent === "CONVERSATION_BOARD_SCOPE"
             ? scopeMutationFor(resolved.context, input.conversationScope, false)
             : null,
+        authoritativeLanguages: languageIdentitiesOf(resolved.context),
       };
     }
 
@@ -300,6 +449,7 @@ export class BoardResponseService {
       return {
         context: this.emptyContext(parsed, "NO_EFFECTIVE_BOARD", "GENERAL_EDUCATIONAL"),
         scopeMutation: null,
+        authoritativeLanguages: [],
       };
     }
     const evidence = await this.loadEvidence(input, inherited);
@@ -311,6 +461,7 @@ export class BoardResponseService {
         resolutionReason: evidence.status === "CONFLICT" ? "AUTHORITATIVE_SOURCE_CONFLICT" : null,
       }),
       scopeMutation: null,
+      authoritativeLanguages: languageIdentitiesOf(inherited),
     };
   }
 
@@ -535,6 +686,10 @@ export class BoardResponseService {
       sourceLabels: evidence.sourceLabels,
       comparisonBoards: [],
       generalKnowledgePolicy: responseMode === "CURRICULUM_GROUNDED" ? "ENRICHMENT_ONLY" : "GENERAL_ONLY",
+      // Provisional; resolve() replaces these with the US-120 resolution.
+      responseLanguage: null,
+      responseLanguageSource: null,
+      responseLanguageAvailability: "UNRESOLVED",
     };
   }
 
@@ -543,7 +698,7 @@ export class BoardResponseService {
     parsed: BoardRequestParseResult,
     activeBoards: ActiveBoardIdentity[],
     normal: ResolvedBoardContext | null
-  ): Promise<BoardResponseResolution> {
+  ): Promise<InternalBoardResolution> {
     const comparisonBoards: BoardComparisonProjection[] = [];
     for (const board of parsed.comparisonBoards) {
       const resolved = await this.resolveExactBoard(input, board, activeBoards, normal);
@@ -599,8 +754,13 @@ export class BoardResponseService {
         comparisonBoards,
         generalKnowledgePolicy:
           evidenceStatus === "AVAILABLE" ? "ENRICHMENT_ONLY" : "GENERAL_ONLY",
+        // Provisional; resolve() replaces these with the US-120 resolution.
+        responseLanguage: null,
+        responseLanguageSource: null,
+        responseLanguageAvailability: "UNRESOLVED",
       },
       scopeMutation: null,
+      authoritativeLanguages: [],
     };
   }
 
@@ -646,6 +806,10 @@ export class BoardResponseService {
       sourceLabels: [],
       comparisonBoards: [],
       generalKnowledgePolicy: "GENERAL_ONLY",
+      // Provisional; resolve() replaces these with the US-120 resolution.
+      responseLanguage: null,
+      responseLanguageSource: null,
+      responseLanguageAvailability: "UNRESOLVED",
     };
   }
 }

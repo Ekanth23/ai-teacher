@@ -71,6 +71,25 @@ export interface BoardComparisonProjection {
   evidence: BoardEvidenceProjection[];
 }
 
+/**
+ * US-120 server-resolved response-language source.
+ *
+ * The "current-question language" precedence tier is intentionally absent: it is
+ * determined by the model inside the existing AI response pipeline (Decision
+ * #118), so the server never asserts it.
+ */
+export type ResponseLanguageSource = "EXPLICIT_REQUEST" | "CONFIGURED";
+
+/**
+ * US-120 response-language availability against the authoritative syllabus
+ * language capability list.
+ *
+ * "UNAVAILABLE" is also used when availability cannot be confirmed because no
+ * authoritative syllabus was resolved (Decision #119 clause 1b), so that the
+ * model never asserts curriculum-language alignment it cannot prove.
+ */
+export type ResponseLanguageAvailability = "AVAILABLE" | "UNAVAILABLE" | "UNRESOLVED";
+
 export type BoardResolutionReason =
   | "NO_EFFECTIVE_BOARD"
   | "BOARD_NOT_FOUND"
@@ -103,6 +122,17 @@ export interface BoardResponseContext {
   sourceLabels: string[];
   comparisonBoards: BoardComparisonProjection[];
   generalKnowledgePolicy: "ENRICHMENT_ONLY" | "GENERAL_ONLY";
+  /**
+   * US-120 request-time response language. Display string only; never an
+   * internal, tenant, student, or ownership identifier. Request-scoped and
+   * never persisted (Decision #116).
+   *
+   * Optional so that pre-US-119 context fixtures remain valid; the board
+   * response service always populates all three fields.
+   */
+  responseLanguage?: string | null;
+  responseLanguageSource?: ResponseLanguageSource | null;
+  responseLanguageAvailability?: ResponseLanguageAvailability;
 }
 
 export interface BoardScopeMutation {
