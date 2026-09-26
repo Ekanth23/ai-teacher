@@ -1,0 +1,281 @@
+/**
+ * Stage 2A — Orchestrator configuration.
+ *
+ * DESIGN RULES FOR THIS MODULE
+ * ----------------------------
+ * 1. No credentials. The orchestrator never reads, stores, or accepts API keys,
+ *    tokens, passwords, or connection secrets — for OpenCode or anything else.
+ * 2. No required connectivity. Loading a config must never open a socket, spawn a
+ *    process, or contact a server. Stage 2A runs fully offline.
+ * 3. Safe defaults. Every default is fail-safe: execution disabled, git mutation
+ *    disabled, network disabled, approval automation disabled.
+ */
+
+import path from "node:path";
+
+/** Delivery stages. Stage 2A is architecture + skeleton only. */
+export type OrchestratorStage = "2A" | "2B" | "2C" | "2D";
+
+/** Default and only active stage in Stage 2A. */
+export const DEFAULT_STAGE: OrchestratorStage = "2A";
+
+/**
+ * Execution mode.
+ *
+ * - `disabled` — refuse to invoke OpenCode at all (Stage 2A default).
+ * - `dry-run`  — build plans and payloads but never execute (future opt-in).
+ * - `live`     — execute (Stage 2B+ only, and still gated by approval).
+ */
+export type ExecutionMode = "disabled" | "dry-run" | "live";
+
+/** Console verbosity. */
+export type LogLevel = "silent" | "error" | "warn" | "info" | "debug";
+
+/** Read-only references to existing repository governance documents. */
+export interface GovernanceReferences {
+  /**
+   * Stage 1 workflow rules. Authoritative for OpenCode workflow rules.
+   * The orchestrator REFERENCES this file; it never restates or competes with it.
+   */
+  readonly stage1OpenCodeRulesPath: string;
+  /** Project-level agent instructions. */
+  readonly projectInstructionsPath: string;
+  /** Frozen Master Backlog. */
+  readonly masterBacklogPath: string;
+  /**
+   * Directory holding PO decision records. Discovered dynamically at read time in
+   * a later stage; never a hardcoded file list.
+   */
+  readonly poDecisionsDirectory: string;
+}
+
+export interface OpenCodeAdapterConfig {
+  /** Command/Path used to reach the OpenCode CLI. Never invoked in Stage 2A. */
+  readonly command: string;
+  /**
+   * Optional OpenCode server URL. Declared for the future adapter.
+   * Stage 2A never issues a request to it, and never validates it by connecting.
+   */
+  readonly serverUrl: string | null;
+  /** Working directory for adapter invocations (the repository root). */
+  readonly workingDirectory: string;
+  /** Per-invocation timeout for future stages. */
+  readonly timeoutMs: number;
+}
+
+/**
+ * The safety floor, as literal types.
+ *
+ * These four values are the fail-safe defaults and are typed as literals so that a
+ * component declaring `readonly gitMutationEnabled: false` cannot be handed a
+ * `true` without a type error. They are NOT env-driven and must never become
+ * env-driven.
+ */
+export const SAFETY_LITERALS = Object.freeze({
+  gitMutationEnabled: false,
+  networkEnabled: false,
+  approvalRequired: true,
+  explicitApprovalOnly: true,
+} as const);
+
+export interface SafetyConfig {
+  /** Always `false` in Stage 2A. The orchestrator never mutates git. */
+  readonly gitMutationEnabled: typeof SAFETY_LITERALS.gitMutationEnabled;
+  /** Always `false` in Stage 2A. The orchestrator makes no network calls. */
+  readonly networkEnabled: typeof SAFETY_LITERALS.networkEnabled;
+  /**
+   * Always `true`. There is no configuration switch that disables the approval
+   * gate. `PLAN_READY -> BUILDING` is unreachable without a recorded grant.
+   */
+  readonly approvalRequired: typeof SAFETY_LITERALS.approvalRequired;
+  /**
+   * Always `true`. There is no configuration switch that enables automatic
+   * plan approval.
+   */
+  readonly explicitApprovalOnly: typeof SAFETY_LITERALS.explicitApprovalOnly;
+}
+
+export interface OrchestratorConfig {
+  readonly stage: OrchestratorStage;
+  readonly repositoryRoot: string;
+  readonly stateDirectory: string;
+  readonly executionMode: ExecutionMode;
+  readonly logLevel: LogLevel;
+  readonly opencode: OpenCodeAdapterConfig;
+  readonly safety: SafetyConfig;
+  readonly governance: GovernanceReferences;
+}
+
+/** Partial overrides accepted by {@link loadConfig}. */
+export type ConfigOverrides = Partial<
+  Pick<OrchestratorConfig, "stage" | "repositoryRoot" | "stateDirectory" | "executionMode" | "logLevel">
+> & {
+  readonly opencodeCommand?: string;
+  readonly opencodeServerUrl?: string | null;
+  readonly opencodeTimeoutMs?: number;
+};
+
+/** Environment variables read by the orchestrator. No secrets are read. */
+export const ENV_KEYS = {
+  stage: "AI_ORCHESTRATOR_STAGE",
+  repositoryRoot: "AI_ORCHESTRATOR_REPOSITORY_ROOT",
+  stateDirectory: "AI_ORCHESTRATOR_STATE_DIR",
+  executionMode: "AI_ORCHESTRATOR_EXECUTION_MODE",
+  logLevel: "AI_ORCHESTRATOR_LOG_LEVEL",
+  opencodeCommand: "AI_ORCHESTRATOR_OPENCODE_COMMAND",
+  opencodeServerUrl: "AI_ORCHESTRATOR_OPENCODE_SERVER_URL",
+  opencodeTimeoutMs: "AI_ORCHESTRATOR_OPENCODE_TIMEOUT_MS",
+} as const;
+
+/** Human-readable invariants asserted by this configuration. Documentation as code. */
+export const CONFIG_INVARIANTS: readonly string[] = [
+  "Stage 2A never invokes OpenCode.",
+  "Stage 2A never starts an OpenCode server.",
+  "Stage 2A never performs a network request.",
+  "No credentials, API keys, or tokens are read, stored, or accepted.",
+  "The orchestrator never mutates git state (no add, commit, stash, reset, clean, checkout).",
+  "The approval gate is mandatory and cannot be disabled by configuration.",
+  "Automatic plan approval does not exist and cannot be enabled by configuration.",
+  "The orchestrator contains no AI Teacher product or business logic.",
+];
+
+const EXECUTION_MODES: readonly ExecutionMode[] = ["disabled", "dry-run", "live"];
+const LOG_LEVELS: readonly LogLevel[] = ["silent", "error", "warn", "info", "debug"];
+
+/** Directory containing this package's compiled entry point. */
+function packageRoot(): string {
+  // `import.meta.dirname` is available on Node >= 20.11 (engines are enforced).
+  return path.resolve(import.meta.dirname, "..");
+}
+
+/** Default repository root: the package lives at `<repo>/tools/ai-orchestrator`. */
+export function defaultRepositoryRoot(): string {
+  return path.resolve(packageRoot(), "..", "..");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function pickString(source: Record<string, unknown>, key: string): string | undefined {
+  const value = source[key];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  return value;
+}
+
+function pickEnum<T extends string>(
+  source: Record<string, unknown>,
+  key: string,
+  allowed: readonly T[],
+): T | undefined {
+  const raw = pickString(source, key);
+  if (raw === undefined) return undefined;
+  const upper = raw.toLowerCase();
+  const match = allowed.find((candidate) => candidate.toLowerCase() === upper);
+  return match;
+}
+
+function pickPositiveInt(source: Record<string, unknown>, key: string): number | undefined {
+  const raw = pickString(source, key);
+  if (raw === undefined) return undefined;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+/**
+ * Resolve configuration from explicit overrides then environment variables.
+ *
+ * Pure and offline: no filesystem writes, no process spawning, no network.
+ */
+export function loadConfig(overrides: ConfigOverrides = {}, env: NodeJS.ProcessEnv = process.env): OrchestratorConfig {
+  const repositoryRoot = path.resolve(
+    overrides.repositoryRoot ?? env[ENV_KEYS.repositoryRoot] ?? defaultRepositoryRoot(),
+  );
+
+  const stateDirectory = path.resolve(
+    overrides.stateDirectory ??
+      env[ENV_KEYS.stateDirectory] ??
+      path.join(repositoryRoot, "tools", "ai-orchestrator", "state"),
+  );
+
+  const stage = overrides.stage ?? pickEnum(env, ENV_KEYS.stage, ["2A", "2B", "2C", "2D"] as const) ?? DEFAULT_STAGE;
+
+  const executionMode =
+    overrides.executionMode ??
+    pickEnum(env, ENV_KEYS.executionMode, EXECUTION_MODES) ??
+    "disabled";
+
+  const logLevel = overrides.logLevel ?? pickEnum(env, ENV_KEYS.logLevel, LOG_LEVELS) ?? "info";
+
+  const opencodeCommand =
+    overrides.opencodeCommand ?? env[ENV_KEYS.opencodeCommand] ?? "opencode";
+
+  const opencodeServerUrlRaw = pickString(env, ENV_KEYS.opencodeServerUrl);
+  const opencodeServerUrl =
+    overrides.opencodeServerUrl !== undefined ? overrides.opencodeServerUrl : (opencodeServerUrlRaw ?? null);
+
+  const opencodeTimeoutMs = overrides.opencodeTimeoutMs ?? pickPositiveInt(env, ENV_KEYS.opencodeTimeoutMs) ?? 600_000;
+
+  const config: OrchestratorConfig = {
+    stage,
+    repositoryRoot,
+    stateDirectory,
+    executionMode,
+    logLevel,
+    opencode: {
+      command: opencodeCommand,
+      serverUrl: opencodeServerUrl,
+      workingDirectory: repositoryRoot,
+      timeoutMs: opencodeTimeoutMs,
+    },
+    safety: {
+      // Single source of truth for the fail-safe floor; see SAFETY_LITERALS.
+      ...SAFETY_LITERALS,
+    },
+    governance: {
+      stage1OpenCodeRulesPath: path.join(repositoryRoot, ".opencode", "ai-workflow-rules.md"),
+      projectInstructionsPath: path.join(repositoryRoot, "AGENTS.md"),
+      masterBacklogPath: path.join(
+        repositoryRoot,
+        "AI_Teacher_16_Epic_Master_PO_User_Story_Backlog_Draft_2.0_FINAL_CONSOLIDATED.txt",
+      ),
+      poDecisionsDirectory: path.join(repositoryRoot, "Docs"),
+    },
+  };
+
+  assertConfigIsSafe(config);
+  return config;
+}
+
+/**
+ * Fail-fast structural validation of the resolved config.
+ *
+ * Deliberately does NOT touch the filesystem, git, or the network, so that
+ * `orchestrator status` stays a pure, offline smoke test.
+ */
+export function assertConfigIsSafe(config: OrchestratorConfig): void {
+  if (config.safety.approvalRequired !== true || config.safety.explicitApprovalOnly !== true) {
+    throw new Error("Orchestrator safety invariants violated: the approval gate must always be required.");
+  }
+  if (config.safety.gitMutationEnabled) {
+    throw new Error("Orchestrator safety invariants violated: git mutation must remain disabled.");
+  }
+  if (config.safety.networkEnabled) {
+    throw new Error("Orchestrator safety invariants violated: network access must remain disabled in Stage 2A.");
+  }
+  if (config.stage === "2A" && config.executionMode === "live") {
+    throw new Error("Orchestrator safety invariants violated: Stage 2A cannot run in live execution mode.");
+  }
+  if (!isRecord(config.opencode)) {
+    throw new Error("Orchestrator safety invariants violated: malformed OpenCode adapter config.");
+  }
+}
+
+/** The orchestrator package directory (`tools/ai-orchestrator`). */
+export function orchestratorPackageRoot(): string {
+  return packageRoot();
+}
+
+/** Unused-shape guard so `isRecord` remains exercised by the config surface. */
+export const CONFIG_GUARD_HELPERS = { isRecord } as const;

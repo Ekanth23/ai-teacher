@@ -1,0 +1,7 @@
+# Placeholder for orchestrator workflow state.
+#
+# Stage 2A creates NO state files. Workflow persistence is Stage 2B work.
+# This directory is gitignored for runtime state (see .gitignore) and is tracked
+# only through this .gitkeep so the layout exists before it is needed.
+#
+# No user-specific, machine-specific, or workflow-specific state is committed.

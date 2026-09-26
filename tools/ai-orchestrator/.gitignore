@@ -1,0 +1,4 @@
+# Stage 2A artifacts. Never commit build output or installed dependencies.
+node_modules/
+dist/
+*.tsbuildinfo
