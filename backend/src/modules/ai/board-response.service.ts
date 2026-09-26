@@ -18,6 +18,7 @@ import {
   parseLanguageRequest,
   type LanguageIdentity,
 } from "./language-request-parser.js";
+import { SubjectTopicResolutionService } from "./subject-topic-resolution.service.js";
 import type {
   ActiveBoardIdentity,
   BoardComparisonProjection,
@@ -32,6 +33,7 @@ import type {
   BoardScopeMutation,
   ResponseLanguageAvailability,
   ResponseLanguageSource,
+  SubjectTopicRequestOutcome,
 } from "./board-response.types.js";
 
 /**
@@ -67,6 +69,12 @@ interface ResolvedBoardContext {
   medium: ResolvedEntity | null;
   languages: ResolvedEntity[];
   hierarchy: LearningHierarchyResolution;
+  /**
+   * US-122 explicit subject/chapter/topic request outcome for the current
+   * response only. Absent when the question contained no explicit request, so
+   * every pre-US-122 resolution path is unchanged.
+   */
+  subjectTopicRequestOutcome?: Exclude<SubjectTopicRequestOutcome, "NONE">;
 }
 
 interface EvidenceSelection {
@@ -230,10 +238,15 @@ function scopeMutationFor(
 export class BoardResponseService {
   private readonly repository: BoardResponseDependencies["repository"];
   private readonly learningContext: BoardResponseDependencies["learningContext"];
+  private readonly subjectTopics: SubjectTopicResolutionService;
 
   constructor(dependencies: Partial<BoardResponseDependencies> = {}) {
     this.repository = dependencies.repository ?? new BoardEvidenceRepository();
     this.learningContext = dependencies.learningContext ?? new LearningContextService();
+    // US-122: the seam reuses the same authoritative resolver instance, so an
+    // explicit request is resolved by exactly the same rules and predicates as
+    // the conversation-scope hierarchy.
+    this.subjectTopics = new SubjectTopicResolutionService(this.learningContext);
   }
 
   async resolve(input: BoardResponseInput): Promise<BoardResponseResolution> {
@@ -378,10 +391,11 @@ export class BoardResponseService {
           authoritativeLanguages: [],
         };
       }
-      const evidence = await this.loadEvidence(input, normal);
+      const scoped = await this.applyExplicitSubjectTopic(input, normal);
+      const evidence = await this.loadEvidence(input, scoped);
       const context = this.singleBoardContext({
         parsed,
-        resolved: normal,
+        resolved: scoped,
         evidence,
         resolutionReason: evidence.status === "CONFLICT" ? "AUTHORITATIVE_SOURCE_CONFLICT" : null,
       });
@@ -421,11 +435,12 @@ export class BoardResponseService {
           authoritativeLanguages: [],
         };
       }
-      const evidence = await this.loadEvidence(input, resolved.context);
+      const scoped = await this.applyExplicitSubjectTopic(input, resolved.context);
+      const evidence = await this.loadEvidence(input, scoped);
       return {
         context: this.singleBoardContext({
           parsed,
-          resolved: resolved.context,
+          resolved: scoped,
           evidence,
           resolutionReason: evidence.status === "CONFLICT" ? "AUTHORITATIVE_SOURCE_CONFLICT" : null,
         }),
@@ -452,11 +467,12 @@ export class BoardResponseService {
         authoritativeLanguages: [],
       };
     }
-    const evidence = await this.loadEvidence(input, inherited);
+    const scoped = await this.applyExplicitSubjectTopic(input, inherited);
+    const evidence = await this.loadEvidence(input, scoped);
     return {
       context: this.singleBoardContext({
         parsed,
-        resolved: inherited,
+        resolved: scoped,
         evidence,
         resolutionReason: evidence.status === "CONFLICT" ? "AUTHORITATIVE_SOURCE_CONFLICT" : null,
       }),
@@ -593,6 +609,45 @@ export class BoardResponseService {
     };
   }
 
+  /**
+   * US-122: attempt authoritative resolution for an explicit subject/chapter/topic
+   * request in the current question, before curriculum evidence is selected, so
+   * the evidence and the rendered scope both follow the resolved hierarchy.
+   *
+   * Strictly additive and request-scoped: when the question contains no explicit
+   * request the context is returned unchanged, and this never contributes to a
+   * conversation scope mutation.
+   */
+  private async applyExplicitSubjectTopic(
+    input: BoardResponseInput,
+    context: ResolvedBoardContext
+  ): Promise<ResolvedBoardContext> {
+    let resolution: Awaited<ReturnType<SubjectTopicResolutionService["resolve"]>>;
+    try {
+      resolution = await this.subjectTopics.resolve({
+        organizationId: input.organizationId,
+        question: input.question,
+        classId: context.class.id,
+        syllabusId: context.syllabusId,
+        scope: {
+          subject: input.conversationScope.subject,
+          chapter: input.conversationScope.chapter,
+          topic: input.conversationScope.topic,
+        },
+        currentHierarchy: context.hierarchy,
+      });
+    } catch {
+      // A seam failure must never break an otherwise valid response.
+      return context;
+    }
+    if (resolution.outcome === "NONE") return context;
+    return {
+      ...context,
+      hierarchy: resolution.hierarchy,
+      subjectTopicRequestOutcome: resolution.outcome,
+    };
+  }
+
   private async inheritedContext(
     input: BoardResponseInput,
     activeBoards: ActiveBoardIdentity[],
@@ -690,6 +745,11 @@ export class BoardResponseService {
       responseLanguage: null,
       responseLanguageSource: null,
       responseLanguageAvailability: "UNRESOLVED",
+      // US-122: present only when the question contained an explicit
+      // subject/chapter/topic request.
+      ...(resolved.subjectTopicRequestOutcome
+        ? { subjectTopicRequestOutcome: resolved.subjectTopicRequestOutcome }
+        : {}),
     };
   }
 

@@ -90,6 +90,30 @@ export type ResponseLanguageSource = "EXPLICIT_REQUEST" | "CONFIGURED";
  */
 export type ResponseLanguageAvailability = "AVAILABLE" | "UNAVAILABLE" | "UNRESOLVED";
 
+/** A level of the authoritative curriculum hierarchy. */
+export type SubjectTopicLevel = "subject" | "chapter" | "topic";
+
+/**
+ * US-122 outcome of an explicit subject/chapter/topic request in the current
+ * question (Decision #120).
+ *
+ * - RESOLVED: the explicitly requested level resolved against an authoritative
+ *   relationship and is the curriculum context for this response only.
+ * - UNRESOLVED: no authoritative relationship exists. The request stays
+ *   unresolved and may only be answered as general education.
+ * - AMBIGUOUS: several authoritative candidates exist; the system must not
+ *   guess, and a minimum targeted clarification may be requested.
+ * - SOURCE_UNAVAILABLE: the authoritative source could not be consulted; no
+ *   curriculum relationship may be fabricated.
+ * - NONE: the question contained no explicit subject/chapter/topic request.
+ */
+export type SubjectTopicRequestOutcome =
+  | "NONE"
+  | "RESOLVED"
+  | "UNRESOLVED"
+  | "AMBIGUOUS"
+  | "SOURCE_UNAVAILABLE";
+
 export type BoardResolutionReason =
   | "NO_EFFECTIVE_BOARD"
   | "BOARD_NOT_FOUND"
@@ -133,6 +157,16 @@ export interface BoardResponseContext {
   responseLanguage?: string | null;
   responseLanguageSource?: ResponseLanguageSource | null;
   responseLanguageAvailability?: ResponseLanguageAvailability;
+  /**
+   * US-122 explicit subject/chapter/topic request outcome. Present only when the
+   * current question actually contained an explicit request, so a response
+   * without one is byte-identical to the pre-US-122 contract.
+   *
+   * Request-scoped and never persisted (Decision #120). The levels themselves are
+   * never carried here: an internal lookup identity must not cross into the
+   * provider-safe contract.
+   */
+  subjectTopicRequestOutcome?: Exclude<SubjectTopicRequestOutcome, "NONE">;
 }
 
 export interface BoardScopeMutation {

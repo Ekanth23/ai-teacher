@@ -250,9 +250,15 @@ describe("US-121 class-aware resolution over the US-119/US-120 context", () => {
     const service = new BoardResponseService(dependencies());
     const result = await service.resolve(baseInput());
 
-    // US-121 must not extend the US-119/US-120 provider-safe contract: the
-    // resolved context is exactly the pre-existing shape.
-    expect(Object.keys(result.context).sort()).toEqual([
+    // US-121 must not extend the US-119/US-120 provider-safe contract. The
+    // assertion is expressed as "nothing class-related was added, and the
+    // contract only ever grows by strictly optional request-scoped fields", so a
+    // later story's additive optional field (US-122's explicit subject/topic
+    // request outcome) does not have to be frozen into this US-121 guard.
+    const keys = Object.keys(result.context);
+    expect(keys.filter((key) => /classAwareness|educationalLevel/i.test(key))).toEqual([]);
+
+    const preUs121Contract = [
       "chapter",
       "comparisonBoards",
       "duration",
@@ -273,7 +279,15 @@ describe("US-121 class-aware resolution over the US-119/US-120 context", () => {
       "sourceLabels",
       "subject",
       "topic",
-    ]);
+    ];
+    // Strictly optional request-scoped fields added by later stories. US-122 adds
+    // the explicit subject/topic request outcome, which is absent entirely when
+    // the question names no curriculum level.
+    const laterAdditiveOptionalFields = ["subjectTopicRequestOutcome"];
+    for (const key of keys) {
+      expect([...preUs121Contract, ...laterAdditiveOptionalFields], key).toContain(key);
+    }
+
     // And the class is not persisted anywhere in the resolution output.
     expect(JSON.stringify(result.context)).not.toContain("classAwareness");
     expect(JSON.stringify(result.context)).not.toContain("educationalLevelAvailable");
