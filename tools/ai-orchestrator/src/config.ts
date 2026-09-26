@@ -13,11 +13,16 @@
 
 import path from "node:path";
 
-/** Delivery stages. Stage 2A is architecture + skeleton only. */
+/** Delivery stages. */
 export type OrchestratorStage = "2A" | "2B" | "2C" | "2D";
 
-/** Default and only active stage in Stage 2A. */
-export const DEFAULT_STAGE: OrchestratorStage = "2A";
+/**
+ * Stage 2B is the active stage: the OpenCode CLI adapter is implemented.
+ *
+ * Workflow execution (`start`/`plan`/`build`/...) remains refused regardless of
+ * this value; see `OrchestratorService`.
+ */
+export const DEFAULT_STAGE: OrchestratorStage = "2B";
 
 /**
  * Execution mode.
@@ -50,17 +55,33 @@ export interface GovernanceReferences {
 }
 
 export interface OpenCodeAdapterConfig {
-  /** Command/Path used to reach the OpenCode CLI. Never invoked in Stage 2A. */
+  /**
+   * Command or path used to reach the OpenCode CLI.
+   *
+   * Stage 2B resolves this to a NATIVELY SPAWNABLE executable. A `.cmd`/`.bat`
+   * shim is never executed, because doing so would require a shell. See
+   * `opencode-executable.ts`.
+   */
   readonly command: string;
   /**
-   * Optional OpenCode server URL. Declared for the future adapter.
-   * Stage 2A never issues a request to it, and never validates it by connecting.
+   * Explicit executable override from `OPENCODE_BIN`, or `null` to resolve
+   * `command` on PATH. Never a shell command string.
+   */
+  readonly bin: string | null;
+  /**
+   * Optional OpenCode server URL. Declared for a future stage.
+   * Stage 2A/2B never issue a request to it, and never validate it by connecting.
+   * The Stage 2B adapter deliberately has no server mode.
    */
   readonly serverUrl: string | null;
   /** Working directory for adapter invocations (the repository root). */
   readonly workingDirectory: string;
   /** Per-invocation timeout for future stages. */
   readonly timeoutMs: number;
+  /** Upper bound on captured stdout/stderr per invocation. */
+  readonly maxOutputBytes: number;
+  /** Grace period between the polite kill and the forced kill. */
+  readonly killGraceMs: number;
 }
 
 /**
@@ -111,8 +132,10 @@ export type ConfigOverrides = Partial<
   Pick<OrchestratorConfig, "stage" | "repositoryRoot" | "stateDirectory" | "executionMode" | "logLevel">
 > & {
   readonly opencodeCommand?: string;
+  readonly opencodeBin?: string;
   readonly opencodeServerUrl?: string | null;
   readonly opencodeTimeoutMs?: number;
+  readonly opencodeMaxOutputBytes?: number;
 };
 
 /** Environment variables read by the orchestrator. No secrets are read. */
@@ -125,17 +148,26 @@ export const ENV_KEYS = {
   opencodeCommand: "AI_ORCHESTRATOR_OPENCODE_COMMAND",
   opencodeServerUrl: "AI_ORCHESTRATOR_OPENCODE_SERVER_URL",
   opencodeTimeoutMs: "AI_ORCHESTRATOR_OPENCODE_TIMEOUT_MS",
+  /** Stage 2B: the OpenCode executable to resolve. Never a shell command string. */
+  opencodeBin: "OPENCODE_BIN",
+  /** Stage 2B: convenience alias for the same timeout. */
+  opencodeTimeoutMsAlias: "OPENCODE_TIMEOUT_MS",
+  /** Stage 2B: captured-output ceiling per stream. */
+  opencodeMaxOutputBytes: "OPENCODE_MAX_OUTPUT_BYTES",
 } as const;
 
 /** Human-readable invariants asserted by this configuration. Documentation as code. */
 export const CONFIG_INVARIANTS: readonly string[] = [
-  "Stage 2A never invokes OpenCode.",
-  "Stage 2A never starts an OpenCode server.",
-  "Stage 2A never performs a network request.",
-  "No credentials, API keys, or tokens are read, stored, or accepted.",
+  "Workflow execution is not implemented before Stage 2C; the orchestrator refuses it in every stage so far.",
+  "The Stage 2B adapter spawns a native OpenCode executable with no shell involved.",
+  "The adapter never performs a network request and never uses OpenCode server mode.",
+  "No credentials, API keys, or tokens are read, stored, or accepted by the orchestrator.",
   "The orchestrator never mutates git state (no add, commit, stash, reset, clean, checkout).",
   "The approval gate is mandatory and cannot be disabled by configuration.",
   "Automatic plan approval does not exist and cannot be enabled by configuration.",
+  "The OpenCode adapter is not an approval authority and cannot advance workflow state.",
+  "A non-zero OpenCode exit code is never reported as success.",
+  "Exit code 0 from OpenCode means the process completed, not that a story was verified.",
   "The orchestrator contains no AI Teacher product or business logic.",
 ];
 
@@ -211,11 +243,24 @@ export function loadConfig(overrides: ConfigOverrides = {}, env: NodeJS.ProcessE
   const opencodeCommand =
     overrides.opencodeCommand ?? env[ENV_KEYS.opencodeCommand] ?? "opencode";
 
+  /**
+   * `OPENCODE_BIN` wins over the generic command name. It is an executable path,
+   * never a command string with arguments.
+   */
+  const opencodeBin = overrides.opencodeBin ?? pickString(env, ENV_KEYS.opencodeBin);
+
   const opencodeServerUrlRaw = pickString(env, ENV_KEYS.opencodeServerUrl);
   const opencodeServerUrl =
     overrides.opencodeServerUrl !== undefined ? overrides.opencodeServerUrl : (opencodeServerUrlRaw ?? null);
 
-  const opencodeTimeoutMs = overrides.opencodeTimeoutMs ?? pickPositiveInt(env, ENV_KEYS.opencodeTimeoutMs) ?? 600_000;
+  const opencodeTimeoutMs =
+    overrides.opencodeTimeoutMs ??
+    pickPositiveInt(env, ENV_KEYS.opencodeTimeoutMs) ??
+    pickPositiveInt(env, ENV_KEYS.opencodeTimeoutMsAlias) ??
+    600_000;
+
+  const opencodeMaxOutputBytes =
+    overrides.opencodeMaxOutputBytes ?? pickPositiveInt(env, ENV_KEYS.opencodeMaxOutputBytes) ?? 4 * 1024 * 1024;
 
   const config: OrchestratorConfig = {
     stage,
@@ -224,10 +269,15 @@ export function loadConfig(overrides: ConfigOverrides = {}, env: NodeJS.ProcessE
     executionMode,
     logLevel,
     opencode: {
-      command: opencodeCommand,
+      // `bin` is the explicit executable override; when unset the adapter resolves
+      // `command` to a native binary via PATH.
+      command: opencodeBin ?? opencodeCommand,
+      bin: opencodeBin ?? null,
       serverUrl: opencodeServerUrl,
       workingDirectory: repositoryRoot,
       timeoutMs: opencodeTimeoutMs,
+      maxOutputBytes: opencodeMaxOutputBytes,
+      killGraceMs: 2_000,
     },
     safety: {
       // Single source of truth for the fail-safe floor; see SAFETY_LITERALS.
@@ -266,6 +316,9 @@ export function assertConfigIsSafe(config: OrchestratorConfig): void {
   }
   if (config.stage === "2A" && config.executionMode === "live") {
     throw new Error("Orchestrator safety invariants violated: Stage 2A cannot run in live execution mode.");
+  }
+  if (config.executionMode === "live" && config.safety.approvalRequired !== true) {
+    throw new Error("Orchestrator safety invariants violated: live execution requires the approval gate.");
   }
   if (!isRecord(config.opencode)) {
     throw new Error("Orchestrator safety invariants violated: malformed OpenCode adapter config.");

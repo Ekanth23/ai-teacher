@@ -114,8 +114,10 @@ export class ConsoleReporter implements Reporter {
       `  safety invariants (${status.safetyInvariants.length})`,
       ...status.safetyInvariants.map((item) => `    * ${item}`),
       "",
-      "  Stage 2A does NOT execute OpenCode, does NOT modify the AI Teacher application,",
-      "  does NOT approve plans automatically, and does NOT call external APIs.",
+      "  Stage 2B: the OpenCode CLI adapter exists, but no workflow command runs.",
+      "  It does NOT modify the AI Teacher application, does NOT approve plans",
+      "  automatically, does NOT call external APIs, and does NOT mutate git.",
+      "  An OpenCode exit code of 0 is a PROCESS result, never a VERIFIED story.",
     ];
     for (const line of lines) this.#info(line);
   }

@@ -19,6 +19,8 @@ export type OrchestratorErrorCode =
   | "USAGE_ERROR"
   | "CONFIG_INVALID"
   | "NOT_IMPLEMENTED_IN_STAGE"
+  | "OPENCODE_EXECUTABLE_UNRESOLVED"
+  | "OPENCODE_SESSION_UNAVAILABLE"
   | "INVALID_TRANSITION"
   | "APPROVAL_REQUIRED"
   | "APPROVAL_REJECTED"
@@ -114,8 +116,32 @@ export class ApprovalRejectedError extends OrchestratorError {
   }
 }
 
-/** Raised when the git guard detects unauthorized or unsafe repository changes. */
-export class GuardViolationError extends OrchestratorError {
+/**
+ * Raised when the OpenCode CLI cannot be resolved to a natively spawnable
+ * executable. The orchestrator refuses to fall back to a shell.
+ */
+export class OpenCodeExecutableUnresolvedError extends OrchestratorError {
+  readonly hint: string;
+
+  constructor(reason: string, hint: string) {
+    super("OPENCODE_EXECUTABLE_UNRESOLVED", reason, { hint });
+    this.name = "OpenCodeExecutableUnresolvedError";
+    this.hint = hint;
+  }
+}
+
+/**
+ * Raised when a session-continuing operation is attempted without a usable
+ * OpenCode session id. The adapter never invents one.
+ */
+export class OpenCodeSessionUnavailableError extends OrchestratorError {
+  constructor(message: string, details: Readonly<Record<string, string>> = {}) {
+    super("OPENCODE_SESSION_UNAVAILABLE", message, details);
+    this.name = "OpenCodeSessionUnavailableError";
+  }
+}
+
+/** Raised when the git guard detects unauthorized or unsafe repository changes. */export class GuardViolationError extends OrchestratorError {
   readonly unauthorizedPaths: readonly string[];
 
   constructor(reason: string, unauthorizedPaths: readonly string[] = []) {

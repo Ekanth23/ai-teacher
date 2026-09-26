@@ -39,7 +39,7 @@ import type { ContextBuilder } from "./context-builder.js";
 import { createContextBuilder } from "./context-builder.js";
 import { NotImplementedInStageError, ApprovalRequiredError } from "./errors.js";
 import { GUARD_INVARIANTS } from "./git-guard.js";
-import { createOpenCodeClient, STAGE_2A_CAPABILITIES, type OpenCodeClient } from "./opencode-client.js";
+import { createOpenCodeClient, OpenCodeCliClient, STAGE_2B_CAPABILITIES, WORKFLOW_PLANNED_STAGE, type OpenCodeClient } from "./opencode-client.js";
 import type { ResultParser, NormalizedResult } from "./result-parser.js";
 import { createResultParser } from "./result-parser.js";
 import type { Reporter } from "./reporters/console-reporter.js";
@@ -53,8 +53,13 @@ import {
   type WorkflowPhase,
 } from "./workflow.js";
 
-/** Stage expected to own workflow execution. */
-export const ORCHESTRATOR_PLANNED_STAGE = "Stage 2B" as const;
+/**
+ * Stage that owns automatic workflow execution.
+ *
+ * Stage 2B delivered the OpenCode CLI transport. The workflow methods below stay
+ * refused until this stage.
+ */
+export const ORCHESTRATOR_PLANNED_STAGE = WORKFLOW_PLANNED_STAGE;
 
 export interface WorkflowEvent {
   readonly from: WorkflowPhase;
@@ -84,7 +89,7 @@ export interface StartWorkflowRequest {
 export interface OrchestratorStatus {
   readonly name: "ai-orchestrator";
   readonly stage: OrchestratorConfig["stage"];
-  readonly implementationStatus: "skeleton-only";
+  readonly implementationStatus: "skeleton-plus-cli-adapter";
   readonly executionEnabled: false;
   readonly opencodeConnected: false;
   readonly gitMutationEnabled: false;
@@ -100,7 +105,9 @@ export interface OrchestratorStatus {
   readonly implemented: readonly string[];
   readonly notImplemented: readonly string[];
   readonly safetyInvariants: readonly string[];
-  readonly opencodeCapabilities: typeof STAGE_2A_CAPABILITIES;
+  readonly opencodeCapabilities: typeof STAGE_2B_CAPABILITIES;
+  /** Resolved native OpenCode executable, or null when it could not be resolved. */
+  readonly opencodeExecutable: string | null;
 }
 
 /** The full control-layer surface. Stage 2B implements the executable subset. */
@@ -141,29 +148,38 @@ export const IMPLEMENTED_CAPABILITIES: readonly string[] = Object.freeze([
   "Human approval boundary with no auto-approval path.",
   "Pure git snapshot diffing and scope evaluation (no repository access).",
   "Context Package, story resolution, and normalized result models (types + stubs).",
-  "OpenCode adapter interface with a failing stub.",
   "Console reporter and `orchestrator status` / `orchestrator help` CLI.",
+  "Stage 2B: native OpenCode executable resolution with no shell fallback.",
+  "Stage 2B: `opencode run` CLI adapter with stdout/stderr/exit-code capture.",
+  "Stage 2B: enforced per-invocation timeout with child termination.",
+  "Stage 2B: structured process outcomes (success / failure / timeout / spawn-error).",
+  "Stage 2B: read-only `opencode --version` connectivity probe.",
 ]);
 
 export const NOT_IMPLEMENTED_CAPABILITIES: readonly string[] = Object.freeze([
-  "OpenCode session creation, continuation, command execution, and result collection.",
-  "Starting or contacting an OpenCode server.",
-  "Any network request.",
+  "Stage 2C: automatic /ai-plan, /ai-build, /ai-test, /ai-review, /ai-verify execution.",
+  "Automatic multi-story execution and autonomous story selection.",
+  "Automatic approval of any kind.",
+  "Automatic git commits, staging, or rollback.",
+  "OpenCode server mode, HTTP integration, webhooks, or MCP integration.",
+  "Background daemon, browser automation, or VS Code UI automation.",
+  "ChatGPT API integration.",
   "Reading the Master Backlog, PO decisions, or any repository document.",
   "Story resolution by scanning the frozen Master Backlog.",
   "Context Package document loading.",
-  "Parsing real OpenCode output.",
+  "Parsing real OpenCode output into workflow results.",
   "Git baseline capture and live `git status` reads.",
   "Any git mutation (add, commit, stash, reset, clean, checkout, restore, push).",
   "Persisting workflow state to the state directory.",
-  "Executing /ai-plan, /ai-build, /ai-test, /ai-review, or /ai-verify.",
 ]);
 
 /**
- * Stage 2A orchestrator.
+ * Stage 2A orchestrator, extended by Stage 2B.
  *
- * `getStatus()` is real. Every method that would advance a workflow fails
- * loudly, so a caller can never mistake Stage 2A for an executed workflow.
+ * `getStatus()` is real. The workflow methods `start`/`plan`/`build`/... still
+ * refuse, because automatic workflow execution is Stage 2C work and is explicitly
+ * out of Stage 2B scope. Stage 2B adds the OpenCode CLI *transport* only; the
+ * orchestrator remains the sole owner of workflow state and approval.
  */
 export class Stage2AOrchestrator implements OrchestratorService {
   readonly #deps: OrchestratorDependencies;
@@ -174,10 +190,11 @@ export class Stage2AOrchestrator implements OrchestratorService {
 
   getStatus(): OrchestratorStatus {
     const { config } = this.#deps;
+    const executable = resolveStatusExecutable(this.#deps.opencode, config);
     return {
       name: "ai-orchestrator",
       stage: config.stage,
-      implementationStatus: "skeleton-only",
+      implementationStatus: "skeleton-plus-cli-adapter",
       executionEnabled: false,
       opencodeConnected: false,
       gitMutationEnabled: config.safety.gitMutationEnabled,
@@ -193,7 +210,8 @@ export class Stage2AOrchestrator implements OrchestratorService {
       implemented: IMPLEMENTED_CAPABILITIES,
       notImplemented: NOT_IMPLEMENTED_CAPABILITIES,
       safetyInvariants: [...CONFIG_INVARIANTS, ...GUARD_INVARIANTS],
-      opencodeCapabilities: STAGE_2A_CAPABILITIES,
+      opencodeCapabilities: STAGE_2B_CAPABILITIES,
+      opencodeExecutable: executable,
     };
   }
 
@@ -246,7 +264,10 @@ export class Stage2AOrchestrator implements OrchestratorService {
   }
 
   #refuse(capability: string): Promise<never> {
-    return Promise.reject(new NotImplementedInStageError(capability, "Stage 2A", ORCHESTRATOR_PLANNED_STAGE));
+    // Deliberate: Stage 2B delivered the OpenCode CLI transport only. Automatic
+    // workflow execution is Stage 2C and is refused here so that a Stage 2B
+    // adapter can never be mistaken for an autonomous workflow runner.
+    return Promise.reject(new NotImplementedInStageError(capability, "Stage 2B", WORKFLOW_PLANNED_STAGE));
   }
 }
 
@@ -275,10 +296,17 @@ export function assertWorkflowMayAdvance(input: {
 /** Pure helper exposing the approval record shape to the reporter. */
 export type { ApprovalRecord };
 
+/** Pure, non-throwing executable lookup for `status`. Never spawns anything. */
+function resolveStatusExecutable(client: OpenCodeClient, config: OrchestratorConfig): string | null {
+  if (!(client instanceof OpenCodeCliClient)) return null;
+  const resolution = client.resolveExecutablePath(config.opencode.workingDirectory);
+  return resolution.kind === "resolved" ? resolution.path : null;
+}
+
 /**
- * Build the Stage 2A dependency graph.
+ * Build the dependency graph.
  *
- * All collaborators are injected, so Stage 2B can replace any one of them without
+ * All collaborators are injected, so Stage 2B+ can replace any one of them without
  * touching the orchestrator, the state machine, or the CLI.
  */
 export function createOrchestrator(

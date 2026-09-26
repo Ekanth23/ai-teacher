@@ -7,6 +7,20 @@
  * through, so the orchestrator can apply the same safety rules regardless of which
  * Stage 1 command produced the output.
  *
+ * STAGE 2B — PROCESS RESULT vs WORKFLOW RESULT
+ * -------------------------------------------
+ * Stage 2B added a real `opencode run` transport. It produces a
+ * `ProcessExecutionOutcome` (see `opencode-process.ts`), which is a DIFFERENT kind
+ * of fact:
+ *
+ *   process result : "the OpenCode process exited 0"      -> success
+ *   workflow result: "US-### satisfies its criteria"       -> not derivable
+ *
+ * This module stays intentionally stubbed. `opencode run` exiting 0 is NOT parsed
+ * here into `VERIFIED`, `TEST PASSED`, or `REVIEW PASSED`, and this stub is
+ * preserved across Stage 2B on purpose. Producing a workflow verdict from process
+ * output alone would let a transport detail masquerade as a PO-governed outcome.
+ *
  * STAGE 2A HARD RULE
  * ------------------
  * No OpenCode output is parsed. `parseOpenCodeResult()` throws. A future stage
@@ -38,6 +52,22 @@ export const RESULT_STATUSES: readonly ResultStatus[] = [
   "scope-violation",
   "po-decision-required",
 ];
+
+/**
+ * Non-negotiable distinction, restated as data so a reviewer can grep for it.
+ *
+ * These strings are exported on purpose. They are the contract between the
+ * Stage 2B transport and this module, and they must survive any future refactor
+ * that is tempted to infer a workflow verdict from a process verdict.
+ */
+export const PROCESS_VS_WORKFLOW_INVARIANTS: readonly string[] = Object.freeze([
+  "An OpenCode exit code of 0 means the PROCESS completed. It does NOT mean a story was implemented.",
+  "An OpenCode exit code of 0 does NOT mean tests passed.",
+  "An OpenCode exit code of 0 does NOT mean review passed.",
+  "An OpenCode exit code of 0 does NOT mean the story is VERIFIED.",
+  "Only the orchestrator's TESTING, REVIEWING, and VERIFYING phases may produce a workflow verdict.",
+  "Only an explicit human ApprovalGranted decision may move a workflow into BUILDING.",
+]);
 
 /** A single validation command outcome. */
 export interface CheckResult {
