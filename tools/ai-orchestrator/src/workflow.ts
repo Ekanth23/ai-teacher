@@ -30,6 +30,8 @@
  */
 
 import { InvalidTransitionError, type OrchestratorErrorCode } from "./errors.js";
+import type { CheckEvidence } from "./result-parser.js";
+import { evaluatePerCheckVerification } from "./result-parser.js";
 
 /** Non-terminal, forward-moving phases. */
 export const ACTIVE_PHASES = [
@@ -258,6 +260,13 @@ export interface VerificationEvidence {
   readonly guardViolations: readonly string[];
   /** Typecheck must have passed when the story touches TypeScript. */
   readonly typecheckPassed: boolean;
+  /**
+   * Stage 2C extension: per-check evidence model.
+   *
+   * When present, this is the authoritative evidence model. The boolean fields
+   * above are derived from this model for backward compatibility.
+   */
+  readonly checks?: readonly CheckEvidence[];
 }
 
 export interface GateDecision {
@@ -272,8 +281,17 @@ export interface GateDecision {
  *
  * Pure function. Stage 2A never calls it, but it exists now so the safety rule is
  * designed rather than retrofitted.
+ *
+ * Stage 2C extension: When per-check evidence is present, it is the authoritative
+ * evidence model. The boolean fields are derived from it for backward compatibility.
  */
 export function evaluateVerification(evidence: VerificationEvidence): GateDecision {
+  // Stage 2C: Use per-check evidence when available
+  if (evidence.checks !== undefined && evidence.checks.length > 0) {
+    return evaluatePerCheckGateDecision(evidence.checks);
+  }
+
+  // Stage 2A/2B: Use boolean evidence model
   if (evidence.guardViolations.length > 0) {
     return {
       allowed: false,
@@ -311,6 +329,31 @@ export function evaluateVerification(evidence: VerificationEvidence): GateDecisi
     reason: "All verification evidence is green.",
     stopWith: null,
     errorCode: null,
+  };
+}
+
+/**
+ * Convert per-check evidence to a GateDecision.
+ *
+ * Stage 2C extension. Uses the per-check evidence model to produce a gate decision.
+ */
+function evaluatePerCheckGateDecision(checks: readonly CheckEvidence[]): GateDecision {
+  const result = evaluatePerCheckVerification(checks);
+
+  if (result.verdict === "VERIFIED") {
+    return {
+      allowed: true,
+      reason: "All verification evidence is green.",
+      stopWith: null,
+      errorCode: null,
+    };
+  }
+
+  return {
+    allowed: false,
+    reason: result.blockers.join("; "),
+    stopWith: "FAILED",
+    errorCode: "VERIFICATION_FAILURE",
   };
 }
 

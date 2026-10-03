@@ -27,6 +27,7 @@
  */
 
 import { NotImplementedInStageError } from "./errors.js";
+import { StoryResolverImpl } from "./story-resolver-impl.js";
 
 /** Stage that is expected to implement repository scanning. */
 export const RESOLVER_PLANNED_STAGE = "Stage 2B" as const;
@@ -127,7 +128,7 @@ export class Stage2AStoryResolver implements StoryResolver {
 }
 
 export function createStoryResolver(): StoryResolver {
-  return new Stage2AStoryResolver();
+  return new StoryResolverImpl();
 }
 
 /** Throwing placeholder for the Stage 2B document scanner. */

@@ -31,6 +31,8 @@
 
 import { NotImplementedInStageError } from "./errors.js";
 import type { ChangedPath, GitPathState } from "./result-parser.js";
+import type { FilePermission } from "./scope-resolver.js";
+import { GitGuardImpl } from "./git-guard-impl.js";
 
 /** Stage that is expected to implement repository access. */
 export const GUARD_PLANNED_STAGE = "Stage 2B" as const;
@@ -97,6 +99,30 @@ export interface GitSnapshot {
   readonly modifiedPaths: readonly string[];
   /** Untracked paths. */
   readonly untrackedPaths: readonly string[];
+  /**
+   * Renamed paths (porcelain R status).
+   * Stage 2C addition (Section 10.3).
+   */
+  readonly renamedPaths: readonly { readonly from: string; readonly to: string }[];
+  /**
+   * Deleted paths (porcelain D status).
+   * Stage 2C addition (Section 10.3).
+   */
+  readonly deletedPaths: readonly string[];
+  /**
+   * Full porcelain status output (audit trail).
+   * Stage 2C addition (Section 10.3).
+   */
+  readonly porcelainStatus: string;
+  /**
+   * Content hashes for pre-existing modified and untracked files.
+   * Key: repository-relative path. Value: SHA-256 hash of file content.
+   * Only populated for files that were modified or untracked at baseline.
+   * Files that cannot be read are recorded with hash value null.
+   *
+   * Stage 2C addition (Section 10.3).
+   */
+  readonly contentHashes: Readonly<Record<string, string | null>>;
 }
 
 /** A baseline is a snapshot taken before any workflow action. */
@@ -117,6 +143,14 @@ export interface GuardScope {
   readonly allowedPrefixes: readonly string[];
   /** Exact repository-relative paths this workflow is authorized to touch. */
   readonly allowedExactPaths: readonly string[];
+  /**
+   * Explicit file-operation permissions. When non-empty, this is the
+   * authoritative scope. Only paths listed here are authorized, and only
+   * for the operations explicitly listed.
+   *
+   * Stage 2C addition (Section 9.2).
+   */
+  readonly filePermissions: readonly FilePermission[];
 }
 
 export interface GuardVerdict {
@@ -215,6 +249,15 @@ export function diffSnapshots(baseline: GitSnapshot, current: GitSnapshot): Path
 
 function isAuthorized(path: string, scope: GuardScope): boolean {
   const normalized = path.replace(/\\/g, "/");
+
+  // When filePermissions is non-empty, it is authoritative.
+  if (scope.filePermissions.length > 0) {
+    return scope.filePermissions.some(
+      (fp) => fp.path.replace(/\\/g, "/") === normalized,
+    );
+  }
+
+  // Fallback: use allowedExactPaths and allowedPrefixes.
   if (scope.allowedExactPaths.includes(normalized)) return true;
   return scope.allowedPrefixes.some((prefix) => {
     const clean = prefix.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -323,4 +366,25 @@ export class Stage2AGitGuard implements GitGuard {
 
 export function createGitGuard(): GitGuard {
   return new Stage2AGitGuard();
+}
+
+/**
+ * Stage 2C factory for the real Git Guard.
+ *
+ * Returns a GitGuard that captures read-only git snapshots with content hashes.
+ * The caller must provide a working directory and a ProcessRunner for executing
+ * git commands.
+ */
+export function createRealGitGuard(options: {
+  readonly workingDirectory: string;
+  readonly processRunner: import("./opencode-process.js").ProcessRunner;
+  readonly gitCommand?: string;
+  readonly readFile?: (filePath: string) => string | null;
+}): GitGuard {
+  return new GitGuardImpl({
+    workingDirectory: options.workingDirectory,
+    processRunner: options.processRunner,
+    ...(options.gitCommand !== undefined ? { gitCommand: options.gitCommand } : {}),
+    ...(options.readFile !== undefined ? { readFile: options.readFile } : {}),
+  });
 }

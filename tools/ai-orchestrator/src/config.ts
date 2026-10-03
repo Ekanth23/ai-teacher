@@ -158,7 +158,7 @@ export const ENV_KEYS = {
 
 /** Human-readable invariants asserted by this configuration. Documentation as code. */
 export const CONFIG_INVARIANTS: readonly string[] = [
-  "Workflow execution is not implemented before Stage 2C; the orchestrator refuses it in every stage so far.",
+  "Workflow execution is implemented in Stage 2C; the orchestrator refuses it in earlier stages.",
   "The Stage 2B adapter spawns a native OpenCode executable with no shell involved.",
   "The adapter never performs a network request and never uses OpenCode server mode.",
   "No credentials, API keys, or tokens are read, stored, or accepted by the orchestrator.",
@@ -312,10 +312,13 @@ export function assertConfigIsSafe(config: OrchestratorConfig): void {
     throw new Error("Orchestrator safety invariants violated: git mutation must remain disabled.");
   }
   if (config.safety.networkEnabled) {
-    throw new Error("Orchestrator safety invariants violated: network access must remain disabled in Stage 2A.");
+    throw new Error("Orchestrator safety invariants violated: network access must remain disabled.");
   }
   if (config.stage === "2A" && config.executionMode === "live") {
     throw new Error("Orchestrator safety invariants violated: Stage 2A cannot run in live execution mode.");
+  }
+  if (config.stage === "2B" && config.executionMode === "live") {
+    throw new Error("Orchestrator safety invariants violated: Stage 2B cannot run in live execution mode. Workflow execution is Stage 2C.");
   }
   if (config.executionMode === "live" && config.safety.approvalRequired !== true) {
     throw new Error("Orchestrator safety invariants violated: live execution requires the approval gate.");

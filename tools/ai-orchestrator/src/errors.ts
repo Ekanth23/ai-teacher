@@ -33,7 +33,10 @@ export type OrchestratorErrorCode =
   | "GUARD_VIOLATION"
   | "TEST_FAILURE"
   | "REVIEW_FAILURE"
-  | "VERIFICATION_FAILURE";
+  | "VERIFICATION_FAILURE"
+  | "WORKFLOW_NOT_FOUND"
+  | "PLAN_NOT_APPROVED"
+  | "CHECK_WAIVER_REQUIRED";
 
 /** Base class for all orchestrator failures. */
 export class OrchestratorError extends Error {
@@ -141,12 +144,46 @@ export class OpenCodeSessionUnavailableError extends OrchestratorError {
   }
 }
 
-/** Raised when the git guard detects unauthorized or unsafe repository changes. */export class GuardViolationError extends OrchestratorError {
+/** Raised when the git guard detects unauthorized or unsafe repository changes. */
+export class GuardViolationError extends OrchestratorError {
   readonly unauthorizedPaths: readonly string[];
 
   constructor(reason: string, unauthorizedPaths: readonly string[] = []) {
     super("GUARD_VIOLATION", reason, { count: String(unauthorizedPaths.length) });
     this.name = "GuardViolationError";
     this.unauthorizedPaths = Object.freeze([...unauthorizedPaths]);
+  }
+}
+
+/** Raised when a workflow run ID does not exist in the store. */
+export class WorkflowNotFoundError extends OrchestratorError {
+  readonly workflowId: string;
+
+  constructor(workflowId: string) {
+    super("WORKFLOW_NOT_FOUND", `Workflow run "${workflowId}" was not found.`, { workflowId });
+    this.name = "WorkflowNotFoundError";
+    this.workflowId = workflowId;
+  }
+}
+
+/** Raised when an operation requires an approved plan but none exists. */
+export class PlanNotApprovedError extends OrchestratorError {
+  readonly workflowId: string;
+
+  constructor(workflowId: string, reason: string) {
+    super("PLAN_NOT_APPROVED", `Workflow "${workflowId}": ${reason}`, { workflowId, reason });
+    this.name = "PlanNotApprovedError";
+    this.workflowId = workflowId;
+  }
+}
+
+/** Raised when a mandatory check is unavailable and no valid PO waiver exists. */
+export class CheckWaiverRequiredError extends OrchestratorError {
+  readonly checkId: string;
+
+  constructor(checkId: string, reason: string) {
+    super("CHECK_WAIVER_REQUIRED", `Check "${checkId}" requires a PO waiver: ${reason}`, { checkId, reason });
+    this.name = "CheckWaiverRequiredError";
+    this.checkId = checkId;
   }
 }

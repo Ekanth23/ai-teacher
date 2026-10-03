@@ -40,11 +40,14 @@ import { createContextBuilder } from "./context-builder.js";
 import { NotImplementedInStageError, ApprovalRequiredError } from "./errors.js";
 import { GUARD_INVARIANTS } from "./git-guard.js";
 import { createOpenCodeClient, OpenCodeCliClient, STAGE_2B_CAPABILITIES, WORKFLOW_PLANNED_STAGE, type OpenCodeClient } from "./opencode-client.js";
+import { createProcessRunner, type ProcessRunner } from "./opencode-process.js";
 import type { ResultParser, NormalizedResult } from "./result-parser.js";
 import { createResultParser } from "./result-parser.js";
 import type { Reporter } from "./reporters/console-reporter.js";
 import { createStoryResolver, type StoryResolver } from "./story-resolver.js";
-import { createGitGuard, type GitGuard } from "./git-guard.js";
+import { createRealGitGuard, type GitGuard } from "./git-guard.js";
+import { createWorkflowStore, type WorkflowRun } from "./workflow-store.js";
+import { Stage2COrchestrator } from "./orchestrator-impl.js";
 import {
   describeStateMachine,
   transition,
@@ -61,24 +64,13 @@ import {
  */
 export const ORCHESTRATOR_PLANNED_STAGE = WORKFLOW_PLANNED_STAGE;
 
-export interface WorkflowEvent {
-  readonly from: WorkflowPhase;
-  readonly to: WorkflowPhase;
-  readonly trigger: TransitionTrigger;
-  readonly at: string;
-  readonly actor: string;
-  readonly note: string | null;
-}
-
-/** In-memory representation of one workflow run. Stage 2A creates none. */
-export interface WorkflowRun {
-  readonly id: string;
-  readonly storyId: string | null;
-  readonly phase: WorkflowPhase;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly history: readonly WorkflowEvent[];
-}
+/**
+ * The workflow run/event model is owned by the store, which implements the
+ * audit trail (including auditable waiver grant/revocation entries, Rev 19
+ * Decision 3). Re-exported here so `OrchestratorService` and the Stage 2C
+ * implementation share one model instead of a divergent copy.
+ */
+export type { WorkflowEvent, WorkflowRun } from "./workflow-store.js";
 
 export interface StartWorkflowRequest {
   readonly storyId: string | null;
@@ -89,12 +81,12 @@ export interface StartWorkflowRequest {
 export interface OrchestratorStatus {
   readonly name: "ai-orchestrator";
   readonly stage: OrchestratorConfig["stage"];
-  readonly implementationStatus: "skeleton-plus-cli-adapter";
-  readonly executionEnabled: false;
-  readonly opencodeConnected: false;
-  readonly gitMutationEnabled: false;
-  readonly networkEnabled: false;
-  readonly approvalAutomation: false;
+  readonly implementationStatus: "skeleton-plus-cli-adapter" | "stage-2c-partial";
+  readonly executionEnabled: boolean;
+  readonly opencodeConnected: boolean;
+  readonly gitMutationEnabled: boolean;
+  readonly networkEnabled: boolean;
+  readonly approvalAutomation: boolean;
   readonly repositoryRoot: string;
   readonly stateDirectory: string;
   readonly executionMode: OrchestratorConfig["executionMode"];
@@ -139,6 +131,8 @@ export interface OrchestratorDependencies {
   readonly resultParser: ResultParser;
   readonly gitGuard: GitGuard;
   readonly reporter: Reporter;
+  readonly workflowStore: import("./workflow-store.js").WorkflowStore;
+  readonly processRunner: ProcessRunner;
 }
 
 export const IMPLEMENTED_CAPABILITIES: readonly string[] = Object.freeze([
@@ -308,20 +302,28 @@ function resolveStatusExecutable(client: OpenCodeClient, config: OrchestratorCon
  *
  * All collaborators are injected, so Stage 2B+ can replace any one of them without
  * touching the orchestrator, the state machine, or the CLI.
+ *
+ * Stage 2C: Returns the real orchestrator with `start` and `plan` implemented.
  */
 export function createOrchestrator(
   reporter: Reporter,
   overrides: Partial<OrchestratorDependencies> = {},
 ): OrchestratorService {
   const config = overrides.config ?? loadConfig();
-  return new Stage2AOrchestrator({
+  const processRunner = overrides.processRunner ?? createProcessRunner();
+  return new Stage2COrchestrator({
     config,
     opencode: overrides.opencode ?? createOpenCodeClient(config.opencode),
     contextBuilder: overrides.contextBuilder ?? createContextBuilder(),
     storyResolver: overrides.storyResolver ?? createStoryResolver(),
     approvalGate: overrides.approvalGate ?? new InMemoryApprovalGate(),
     resultParser: overrides.resultParser ?? createResultParser(),
-    gitGuard: overrides.gitGuard ?? createGitGuard(),
+    gitGuard: overrides.gitGuard ?? createRealGitGuard({
+      workingDirectory: config.repositoryRoot,
+      processRunner,
+    }),
     reporter,
+    workflowStore: overrides.workflowStore ?? createWorkflowStore(),
+    processRunner,
   });
 }

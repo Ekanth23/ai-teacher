@@ -128,14 +128,14 @@ describe("git guard", () => {
   });
 
   it("treats a missing baseline as STOP", () => {
-    const current = { capturedAt: "t", headCommit: "abc", stagedPaths: [], modifiedPaths: [], untrackedPaths: ["x"], kind: "current" as const };
-    expect(evaluateGuard(null, current, { allowedPrefixes: ["backend/"], allowedExactPaths: [] }).allowed).toBe(false);
+    const current = { capturedAt: "t", headCommit: "abc", stagedPaths: [], modifiedPaths: [], untrackedPaths: ["x"], renamedPaths: [], deletedPaths: [], porcelainStatus: "", contentHashes: {}, kind: "current" as const };
+    expect(evaluateGuard(null, current, { allowedPrefixes: ["backend/"], allowedExactPaths: [], filePermissions: [] }).allowed).toBe(false);
   });
 
   it("STOPs on an unauthorized path and protects pre-existing work", () => {
-    const baseline = { capturedAt: "t0", headCommit: "abc", stagedPaths: [], modifiedPaths: [], untrackedPaths: ["DESIGN.md"], kind: "baseline" as const };
-    const current = { capturedAt: "t1", headCommit: "abc", stagedPaths: [], modifiedPaths: [], untrackedPaths: ["DESIGN.md", "AGENTS.md"], kind: "current" as const };
-    const verdict = evaluateGuard(baseline, current, { allowedPrefixes: ["backend/"], allowedExactPaths: [] });
+    const baseline = { capturedAt: "t0", headCommit: "abc", stagedPaths: [], modifiedPaths: [], untrackedPaths: ["DESIGN.md"], renamedPaths: [], deletedPaths: [], porcelainStatus: "", contentHashes: {}, kind: "baseline" as const };
+    const current = { capturedAt: "t1", headCommit: "abc", stagedPaths: [], modifiedPaths: [], untrackedPaths: ["DESIGN.md", "AGENTS.md"], renamedPaths: [], deletedPaths: [], porcelainStatus: "", contentHashes: {}, kind: "current" as const };
+    const verdict = evaluateGuard(baseline, current, { allowedPrefixes: ["backend/"], allowedExactPaths: [], filePermissions: [] });
     expect(verdict.allowed).toBe(false);
     expect(verdict.unauthorizedPaths).toContain("AGENTS.md");
     expect(verdict.onViolation).toBe("STOP");
@@ -199,8 +199,10 @@ describe("process success is not workflow verification", () => {
 
   it("an exit code of 0 yields a process success only", () => {
     expect(successOutcome.status).toBe("success");
-    // The workflow parser still refuses to interpret anything.
-    expect(() => createResultParser().parse(successOutcome, "BUILDING", "US-101")).toThrow(/not implemented/i);
+    // The parser processes the output but does NOT produce VERIFIED from process success alone.
+    const result = createResultParser().parse(successOutcome, "VERIFYING", "US-101");
+    expect(result.status).not.toBe("po-decision-required");
+    expect(result.phase).toBe("VERIFYING");
   });
 
   it("states the distinction explicitly", () => {
@@ -214,29 +216,32 @@ describe("story resolution and result parsing stay conservative", () => {
     expect(resolution.kind).toBe("not-found");
   });
 
-  it("refuses to parse OpenCode output", () => {
-    expect(() => createResultParser().parse({ anything: true }, "TESTING", "US-101")).toThrow(/not implemented/i);
+  it("parses OpenCode output safely without producing workflow verdicts from process success", () => {
+    const result = createResultParser().parse({ anything: true }, "TESTING", "US-101");
+    expect(result.status).toBe("blocked");
   });
 });
 
-describe("orchestrator still refuses workflow execution", () => {
-  it("refuses every workflow method and reports a safe status", async () => {
+describe("orchestrator workflow execution", () => {
+  it("start, plan, requestApproval, and decideApproval are implemented; other methods still refuse", async () => {
     const config = loadConfig();
     const orchestrator = createOrchestrator(createConsoleReporter({ logLevel: "silent", sink: () => {} }), { config });
 
     const status = orchestrator.getStatus();
     expect(status.stage).toBe("2B");
-    expect(status.executionEnabled).toBe(false);
+    expect(status.executionEnabled).toBe(true);
     expect(status.opencodeConnected).toBe(false);
     expect(status.approvalAutomation).toBe(false);
     expect(status.gitMutationEnabled).toBe(false);
     expect(status.networkEnabled).toBe(false);
     expect(status.stateMachine.buildRequiresApproval).toBe(true);
 
-    for (const method of ["start", "plan", "requestApproval", "decideApproval", "build", "test", "review", "verify", "report"] as const) {
+    // start, plan, requestApproval, decideApproval, build, test, review, and verify are now implemented (Stage 2C-6 Steps 2-5)
+    // Other methods still refuse
+    for (const method of ["report"] as const) {
       // Bound so the private-field access inside the implementation stays intact.
       const call = orchestrator[method].bind(orchestrator) as (id: string) => Promise<unknown>;
-      await expect(call("wf-1")).rejects.toThrow(/not implemented/i);
+      await expect(call("wf-1")).rejects.toThrow(/not.*implemented/i);
     }
   });
 });

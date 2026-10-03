@@ -25,6 +25,7 @@
 
 import type { GovernanceReferences } from "./config.js";
 import { NotImplementedInStageError } from "./errors.js";
+import { ContextBuilderImpl } from "./context-builder-impl.js";
 
 /** Categories of context a future build step may need. */
 export const CONTEXT_SECTION_KINDS = [
@@ -175,9 +176,9 @@ export class Stage2AContextBuilder implements ContextBuilder {
   }
 }
 
-/** Stage 2B/2C will replace this with a real document loader. */
+/** Stage 2C: real document loader. */
 export function createContextBuilder(): ContextBuilder {
-  return new Stage2AContextBuilder();
+  return new ContextBuilderImpl();
 }
 
 /** Throwing placeholder for any attempt to read content in Stage 2A. */
